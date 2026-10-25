@@ -2,7 +2,7 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 -- VERSION: v1.0.47
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
-local WEBHOOK_URL = ""
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1562820396351234150/L0KfBvDgOWwsWWGuPW5-AFNg-tsHNUWKsjhnjxYyyGM_weXP2IzaJvqNopINfbnSJpRN"
 
 -- BOOTSTRAP UI v1.0.47
 do
