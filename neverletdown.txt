@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.47
+-- VERSION: v1.0.48
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1562820396351234150/L0KfBvDgOWwsWWGuPW5-AFNg-tsHNUWKsjhnjxYyyGM_weXP2IzaJvqNopINfbnSJpRN"
@@ -1330,6 +1330,21 @@ do
                     end
                     return false
                 end
+                -- v1.0.48: ringkas isi balasan remote untuk log debug.
+                local function describeResult(x, depth)
+                    depth = depth or 0
+                    if type(x) == "table" then
+                        if depth >= 2 then return "{...}" end
+                        local parts, n = {}, 0
+                        for k, v in pairs(x) do
+                            n += 1
+                            if n > 8 then parts[#parts+1] = "..."; break end
+                            parts[#parts+1] = tostring(k) .. "=" .. describeResult(v, depth + 1)
+                        end
+                        return "{" .. table.concat(parts, ",") .. "}"
+                    end
+                    return tostring(x)
+                end
                 local function kijoDone()
                     publishHistory("STYLE", "Kijo", true)
                     finishToZero()
@@ -1476,10 +1491,23 @@ do
                                         elseif a == false then
                                             task.wait(0.5) -- server menolak, sama seperti Mamori
                                         else
+                                            kijoStatus("Hasil roll: a=" .. describeResult(a):sub(1, 90)
+                                                .. " | b=" .. describeResult(b):sub(1, 60))
                                             if resultIsKijo(a) or resultIsKijo(b) then
-                                                kijoStatus("Hasil Kijo via remote! STOP")
-                                                kijoDone()
-                                                return
+                                                -- v1.0.48: balasan remote TIDAK dipercaya sendirian.
+                                                -- Wajib terkonfirmasi di inventori (maks 6 detik).
+                                                kijoStatus("Remote menyebut Kijo; konfirmasi inventori...")
+                                                local confirmed = false
+                                                for _ = 1, 30 do
+                                                    if hasKijoStyle() == true then confirmed = true; break end
+                                                    task.wait(0.2)
+                                                end
+                                                if confirmed then
+                                                    kijoStatus("Kijo TERKONFIRMASI di inventori! STOP")
+                                                    kijoDone()
+                                                    return
+                                                end
+                                                kijoStatus("Remote menyebut Kijo tapi TIDAK ada di inventori: diabaikan, lanjut")
                                             end
                                             task.wait(0.55) -- jeda tetap
                                         end
