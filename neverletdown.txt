@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.54
+-- VERSION: v1.0.56
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -136,16 +136,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.54: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.56: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.54] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.56] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.54] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.56] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.54] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.56] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -218,17 +218,17 @@ do
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "KIJO v1.0.54: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "KIJO v1.0.56: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[KIJO v1.0.54] " .. kijoLastStatus
+                    local line = "[KIJO v1.0.56] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "KIJO v1.0.54: " .. kijoLastStatus
+                        kijoDebugButton.Text = "KIJO v1.0.56: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -570,12 +570,14 @@ do
                     local marked = pcall(writefile, file, "pending|" .. tostring(os.time()))
                     if not marked then webhookBusy = false; return end
                     task.spawn(function()
-                        local statusLabel = reason == "NO_SLOT_MAMORI"
-                            and "STOP: tidak ada slot aman untuk mencari Mamori"
-                            or (reason == "NO_SLOT_KIJO"
+                        local statusLabel = reason == "LOW_LUCKY_KIJO"
+                            and "STOP: Lucky awal Kijo <=3; tidak melakukan spin Kijo"
+                            or (reason == "NO_SLOT_MAMORI"
+                                and "STOP: tidak ada slot aman untuk mencari Mamori"
+                                or (reason == "NO_SLOT_KIJO"
                                 and "STOP: Mamori dimiliki, tidak ada slot aman untuk Kijo"
                                 or (hasKijo and "SELESAI: Mamori + Kijo"
-                                    or "SELESAI: Mamori"))
+                                    or "SELESAI: Mamori")))
                         local owned = reason ~= "NO_SLOT_MAMORI"
                             and hasMamori() == true
                         local styleResult = hasKijo and "Mamori + Kijo"
@@ -892,6 +894,7 @@ do
                 local kijoBudget = makePersistentLuckyBudget(
                     playerA.UserId, "KIJO", MAX_KIJO_LUCKY_SPENT)
                 local kijoLuckyPendingBefore = nil
+                local clearKijoInitialDecision -- ditetapkan di blok komitmen Kijo
                 kijoStatus("Budget Lucky Kijo: " .. tostring(kijoBudget.spent())
                     .. "/30 (tersimpan lintas rejoin); rollback pending="
                     .. tostring(kijoBudget.isRollbackPending()))
@@ -899,6 +902,11 @@ do
                     local before = kijoBudget.spent()
                     local used, event = kijoBudget.observe(balance)
                     if event == "RESET_AFTER_ROLLBACK" then
+                        -- Siklus rollback selesai: keputusan awal >=4 yang lama
+                        -- tidak boleh dipakai untuk siklus baru.
+                        if type(clearKijoInitialDecision) == "function" then
+                            clearKijoInitialDecision()
+                        end
                         kijoStatus("Rollback Kijo terdeteksi: saldo Lucky pulih;"
                             .. " budget baru 0/30")
                     elseif used > before then
@@ -1543,51 +1551,30 @@ do
                     return false
                 end
 
-                local SPIN_INTENT_FILE = "VL_Kijo_ToZero_" .. tostring(playerA.UserId) .. ".flag"
-                local SPIN_INTENT_TP_KEY = "VL_Kijo_ToZero_" .. tostring(playerA.UserId)
-                local kijoHuntActiveThisSession = false
+                -- v1.0.56: keputusan Lucky Kijo hanya berlaku selama SATU
+                -- sesi game (satu JobId). Jangan memuat keputusan GO dari file
+                -- atau TeleportSetting: rejoin/rollback/koneksi harus dinilai
+                -- ulang dari saldo Lucky pada awal fase Kijo di game BARU.
+                -- Setelah GO dalam sesi ini, jangan cek ambang 4 lagi saat spin.
+                local kijoInitialLucky = nil
                 local function toZeroWasCommitted()
-                    if kijoHuntActiveThisSession then return true end
-                    if typeof(isfile) == "function" and typeof(readfile) == "function" then
-                        local ok, data = pcall(function()
-                            if isfile(SPIN_INTENT_FILE) then return readfile(SPIN_INTENT_FILE) end
-                            return nil
-                        end)
-                        if ok and data == "ACTIVE" then
-                            kijoHuntActiveThisSession = true
-                            return true
-                        end
-                    end
-                    local okTP, intent = pcall(function()
-                        return TPA:GetTeleportSetting(SPIN_INTENT_TP_KEY)
-                    end)
-                    if okTP and intent == "ACTIVE" then
-                        kijoHuntActiveThisSession = true
-                        return true
-                    end
-                    return false
+                    return type(kijoInitialLucky) == "number"
+                        and kijoInitialLucky >= 4
                 end
-                local function commitToZero()
-                    kijoHuntActiveThisSession = true
-                    pcall(function() TPA:SetTeleportSetting(SPIN_INTENT_TP_KEY, "ACTIVE") end)
-                    if typeof(writefile) == "function" then
-                        pcall(writefile, SPIN_INTENT_FILE, "ACTIVE")
+                local function commitToZero(initialLucky)
+                    if type(initialLucky) ~= "number" or initialLucky < 4 then
+                        return false
                     end
+                    if not toZeroWasCommitted() then
+                        kijoInitialLucky = initialLucky
+                    end
+                    return true
+                end
+                clearKijoInitialDecision = function()
+                    kijoInitialLucky = nil
                 end
                 local function finishToZero()
-                    kijoHuntActiveThisSession = false
-                    pcall(function() TPA:SetTeleportSetting(SPIN_INTENT_TP_KEY, "") end)
-                    if typeof(delfile) == "function" then
-                        local ok = pcall(function()
-                            if typeof(isfile) == "function" and isfile(SPIN_INTENT_FILE) then
-                                delfile(SPIN_INTENT_FILE)
-                            end
-                        end)
-                        if ok then return end
-                    end
-                    if typeof(writefile) == "function" then
-                        pcall(writefile, SPIN_INTENT_FILE, "FINISHED")
-                    end
+                    clearKijoInitialDecision()
                 end
                 local kijoStarted = false
                 local kijoFinished = false
@@ -1772,12 +1759,35 @@ do
                             return
                         end
                     end
-                    local luckyBeforeCleanup = readSignal(ctrl.LuckySpins)
-                    if kijoBefore == false and type(luckyBeforeCleanup) == "number"
-                        and luckyBeforeCleanup >= 4 and not toZeroWasCommitted() then
-                        commitToZero()
-                        kijoStatus("Lucky AWAL " .. tostring(luckyBeforeCleanup)
-                            .. " (>=4): komit pencarian Kijo sebelum bersihkan duplikat")
+                    -- Periksa saldo Lucky SATU KALI saat fase Kijo dimulai
+                    -- dalam game INI, sebelum Pity/duplikat/spin.
+                    -- GO tidak dibawa lintas rejoin. Setelah GO, saldo 3/2/1
+                    -- di sesi yang sama tetap boleh di-spin sampai 0 / batas 30.
+                    local luckyAtStart = readSignal(ctrl.LuckySpins)
+                    if kijoBefore == false then
+                        if type(luckyAtStart) ~= "number" then
+                            kijoStatus("Lucky awal Kijo belum terbaca; jangan spin dulu")
+                            return
+                        end
+                        if not toZeroWasCommitted() then
+                            if luckyAtStart <= 3 then
+                                finishToZero()
+                                kijoStatus("Lucky AWAL GAME INI " .. tostring(luckyAtStart)
+                                    .. " (<=3): STOP tanpa spin, kirim webhook")
+                                notifyFinal(false, "LOW_LUCKY_KIJO")
+                                kijoFinished = true
+                                return
+                            end
+                            if not commitToZero(luckyAtStart) then return end
+                            kijoStatus("Lucky AWAL GAME INI " .. tostring(luckyAtStart)
+                                .. " (>=4): lanjut sampai 0 / maksimal 30;"
+                                .. " tidak diwariskan ke game berikutnya")
+                        else
+                            kijoStatus("Lanjut keputusan game INI: Lucky awal "
+                                .. tostring(kijoInitialLucky) .. "; saldo kini "
+                                .. tostring(luckyAtStart)
+                                .. ". Tidak cek ambang 4 saat spin")
+                        end
                     end
                     if kijoBefore == false and toZeroWasCommitted()
                         and not readyAfterKijoPityRejoin() then
@@ -1807,20 +1817,8 @@ do
                         warn("[KIJO] Lucky Style Spins belum dapat dibaca; tidak melakukan spin.")
                         return
                     end
-                    local alreadyCommitted = toZeroWasCommitted()
-                    if lucky < 4 and not alreadyCommitted then
-                        kijoStatus("Lucky awal " .. tostring(lucky) .. " (< 4): webhook langsung, TANPA spin")
-                        print("[KIJO] Lucky awal < 4; webhook final Mamori saja.")
-                        notifyFinal(false)
-                        kijoFinished = true
-                        return
-                    end
-                    if not alreadyCommitted and lucky >= 4 then
-                        commitToZero()
-                        kijoStatus("Lucky awal " .. tostring(lucky) .. " (>= 4): spin sampai 0 / Kijo")
-                    elseif alreadyCommitted then
-                        kijoStatus("Lanjutkan komitmen spin sampai 0; Lucky kini " .. tostring(lucky))
-                    end
+                    -- Tidak ada pemeriksaan ulang ambang 4 di sini.
+                    -- Komit GO sudah dibuat sebelum pembersihan duplikat.
                     if not readyAfterKijoPityRejoin() then
                         kijoStatus("Menunggu Kijo Pity / rejoin penyimpanan")
                         kijoStarted = false
@@ -2078,14 +2076,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[KIJO v1.0.54] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[KIJO v1.0.56] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[KIJO v1.0.54] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[KIJO v1.0.56] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
