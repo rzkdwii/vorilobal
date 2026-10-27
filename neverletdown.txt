@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.49
+-- VERSION: v1.0.52
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -430,44 +430,95 @@ do
                     end
                     return nil
                 end
-                local function notifyFinal(hasKijo)
-                    if webhookBusy or hasMamori() ~= true then return end
+                local inventoryRareStyleSummary
+                -- v1.0.52: notifikasi final bersama untuk Mamori/Kijo dan
+                -- kondisi semua slot Mamori/Kijo terlindungi.
+                local function notifyFinal(hasKijo, reason)
+                    reason = reason or "FINAL"
+                    if webhookBusy then return end
+                    if reason ~= "NO_SLOT_MAMORI" and hasMamori() ~= true then return end
                     if type(WEBHOOK_URL) ~= "string" or WEBHOOK_URL == "" then return end
                     if not WEBHOOK_URL:match("^https://") then return end
                     if typeof(isfile) ~= "function" or typeof(writefile) ~= "function"
                         or typeof(readfile) ~= "function" then return end
-                    local file = "VL_Mamori_Kijo_Final_Once_" .. tostring(playerA.UserId) .. ".flag"
-                    local ok, exists = pcall(isfile, file)
-                    if not ok or exists then return end
+                    if type(inventoryRareStyleSummary) ~= "function" then return end
+                    local rareText = inventoryRareStyleSummary()
+                    if not rareText then
+                        kijoStatus("Webhook menunggu data inventori Style siap")
+                        return
+                    end
+                    -- Versi baru: notifikasi lengkap tidak tertahan flag versi lama.
+                    local file = "VL_Mamori_Kijo_Final_Once_V152_"
+                        .. tostring(playerA.UserId) .. ".flag"
+                    local okRead, existing = pcall(function()
+                        if isfile(file) then return readfile(file) end
+                        return nil
+                    end)
+                    if not okRead then return end
+                    if type(existing) == "string" then
+                        if existing:match("^sent|") then return end
+                        local pendingTime = tonumber(existing:match("^pending|(%d+)"))
+                        if pendingTime and os.time() - pendingTime < 35 then return end
+                    end
                     local send = webhookRequestFunction()
-                    if not send then return end
+                    if not send then
+                        kijoStatus("Webhook belum bisa dikirim: HTTP request tidak tersedia")
+                        return
+                    end
                     webhookBusy = true
                     local marked = pcall(writefile, file, "pending|" .. tostring(os.time()))
                     if not marked then webhookBusy = false; return end
                     task.spawn(function()
+                        local statusLabel = reason == "NO_SLOT_MAMORI"
+                            and "STOP: tidak ada slot aman untuk mencari Mamori"
+                            or (reason == "NO_SLOT_KIJO"
+                                and "STOP: Mamori dimiliki, tidak ada slot aman untuk Kijo"
+                                or (hasKijo and "SELESAI: Mamori + Kijo"
+                                    or "SELESAI: Mamori"))
+                        local owned = reason ~= "NO_SLOT_MAMORI"
+                            and hasMamori() == true
+                        local styleResult = hasKijo and "Mamori + Kijo"
+                            or (owned and "Mamori" or "Mamori belum didapat")
                         local secret = knownSecretName()
-                        local content = "@everyone\n✅ Hasil akhir pencarian Style!\n" ..
-                            "Akun: " .. tostring(playerA.Name) ..
-                            " (UserId: " .. tostring(playerA.UserId) .. ")\n" ..
-                            "Style: " .. (hasKijo and "Mamori + Kijo" or "Mamori") ..
-                            "\nAbility Secret: " .. tostring(secret or "Belum terdeteksi")
-                        local okSend, res = pcall(function()
-                            return send({Url=WEBHOOK_URL, Method="POST",
-                                Headers={["Content-Type"]="application/json"},
-                                Body=game:GetService("HttpService"):JSONEncode({
-                                    content=content, allowed_mentions={parse={"everyone"}}
-                                })})
-                        end)
-                        local status = okSend and type(res)=="table"
-                            and tonumber(res.StatusCode or res.Status) or nil
-                        if status and status>=200 and status<300 then
-                            pcall(writefile, file, "sent|" .. tostring(os.time()))
-                        else
-                            warn("[WEBHOOK FINAL] Pengiriman belum terkonfirmasi; pending dipertahankan: "..tostring(status))
+                        local content = "@everyone\n✅ Hasil akhir pencarian Style!\n"
+                            .. "Akun: " .. tostring(playerA.Name)
+                            .. " (UserId: " .. tostring(playerA.UserId) .. ")\n"
+                            .. "Status: " .. statusLabel .. "\n"
+                            .. "Style: " .. styleResult .. "\n"
+                            .. rareText .. "\n"
+                            .. "Ability Secret: " .. tostring(secret or "Belum terdeteksi")
+                        local delivered = false
+                        for attempt = 1, 3 do
+                            local okSend, res = pcall(function()
+                                return send({Url=WEBHOOK_URL, Method="POST",
+                                    Headers={["Content-Type"]="application/json"},
+                                    Body=game:GetService("HttpService"):JSONEncode({
+                                        content=content,
+                                        allowed_mentions={parse={"everyone"}}
+                                    })})
+                            end)
+                            local status = okSend and type(res) == "table"
+                                and tonumber(res.StatusCode or res.Status) or nil
+                            if status and status >= 200 and status < 300 then
+                                pcall(writefile, file, "sent|" .. tostring(os.time()))
+                                kijoStatus("Webhook final terkirim: " .. statusLabel)
+                                delivered = true
+                                break
+                            end
+                            warn("[WEBHOOK FINAL] Percobaan " .. tostring(attempt)
+                                .. "/3 belum berhasil; HTTP=" .. tostring(status))
+                            if attempt < 3 then task.wait(3 * attempt) end
+                        end
+                        if not delivered then
+                            warn("[WEBHOOK FINAL] Gagal 3x. Penanda pending akan"
+                                .. " boleh dicoba lagi setelah 35 detik.")
                         end
                         webhookBusy = false
                     end)
                 end
+                -- Dapat dipanggil oleh fase Mamori tanpa menggandakan webhook.
+                local noSlotMamoriKey = "__VL_MAMORI_NO_SLOT_" .. tostring(playerA.UserId)
+                env["__VL_FINAL_NOTIFY_" .. tostring(playerA.UserId)] = notifyFinal
 
                 local function showPopup()
                     if hasMamori() ~= true or hasSecretAbility() ~= true then return end
@@ -922,6 +973,108 @@ do
                     calibrationComplete = counts.Secret > 0
                         and counts.Ultra > 0 and counts.Evo > 0
                 end
+                -- v1.0.52: semua style Secret/Ultra/Evo dari SELURUH slot,
+                -- bukan hanya slot aktif atau target Mamori/Kijo.
+                inventoryRareStyleSummary = function()
+                    if not teamA or not teamA.Styles or not styleModA then
+                        -- Baca langsung tanpa bergantung pada worker spin.
+                        local knit = getKnit()
+                        if not teamA and knit then
+                            pcall(function()
+                                teamA = knit.GetController("TeamSelectionController")
+                            end)
+                        end
+                        if not styleModA then
+                            local content = RSA:FindFirstChild("Content")
+                            local module = content and content:FindFirstChild("Style")
+                            if module then
+                                pcall(function() styleModA = require(module) end)
+                            end
+                        end
+                    end
+                    local slots = readSignal(teamA and teamA.Styles)
+                    if type(slots) ~= "table" or not styleModA then return nil end
+                    calibrateProtectedRarity()
+                    local byCategory = {Secret={}, Ultra={}, Evo={}}
+                    local unknown = {}
+                    local known = {
+                        Secret={mamori=true,sanju=true,kisuki=true,kazana=true,
+                            hidari=true,yogan=true,feiko=true,ibara=true,
+                            kumo=true,kijo=true,mikage=true,taichou=true},
+                        Ultra={hakka=true,akari=true,ronin=true},
+                        Evo={encho=true}
+                    }
+                    local count = 0
+                    for key, id in pairs(slots) do
+                        local slot = tonumber(key)
+                        if slot and slot >= 1 and slot % 1 == 0 then
+                            count += 1
+                            local def = styleDef(id)
+                            local name = def and def.DisplayName or tostring(id)
+                            local category = nil
+                            local rarity = def and def.Rarity
+                            if type(rarity) == "string" then
+                                local r = lower(rarity)
+                                if r == "secret" then category = "Secret"
+                                elseif r == "ultra" then category = "Ultra"
+                                elseif r == "evo" or r == "evolution" then
+                                    category = "Evo"
+                                end
+                            elseif type(rarity) == "number" then
+                                local calibrated = rarityProtectedNumbers[rarity]
+                                if calibrated == "Secret" or calibrated == "Ultra"
+                                    or calibrated == "Evo" then
+                                    category = calibrated
+                                end
+                            end
+                            if not category then
+                                local idLower = lower(id)
+                                local nameLower = lower(name)
+                                for _, group in ipairs({"Secret", "Ultra", "Evo"}) do
+                                    if known[group][idLower] or known[group][nameLower] then
+                                        category = group
+                                        break
+                                    end
+                                end
+                            end
+                            local item = {slot=slot, name=tostring(name)}
+                            if category then
+                                table.insert(byCategory[category], item)
+                            elseif not def or rarity == nil
+                                or (type(rarity) == "number"
+                                    and rarityProtectedNumbers[rarity] ~= "Secret"
+                                    and rarityProtectedNumbers[rarity] ~= "Ultra"
+                                    and rarityProtectedNumbers[rarity] ~= "Evo") then
+                                table.insert(unknown, item)
+                            end
+                        end
+                    end
+                    if count == 0 then return nil end
+                    local lines = {"Style Secret / Ultra / Evo (semua slot):"}
+                    for _, category in ipairs({"Secret", "Ultra", "Evo"}) do
+                        local entries = byCategory[category]
+                        table.sort(entries, function(a,b) return a.slot < b.slot end)
+                        lines[#lines+1] = category:upper() .. " (" .. #entries .. "):"
+                        if #entries == 0 then
+                            lines[#lines+1] = "- Tidak ada"
+                        else
+                            for _, entry in ipairs(entries) do
+                                lines[#lines+1] = "- Slot " .. entry.slot
+                                    .. ": " .. entry.name
+                            end
+                        end
+                    end
+                    if #unknown > 0 then
+                        table.sort(unknown, function(a,b) return a.slot < b.slot end)
+                        lines[#lines+1] = "Rarity belum teridentifikasi:"
+                        for _, entry in ipairs(unknown) do
+                            lines[#lines+1] = "- Slot " .. entry.slot
+                                .. ": " .. entry.name
+                        end
+                    end
+                    return table.concat(lines, "\n")
+                end
+
                 local function isProtectedResult(id)
                     if type(id) ~= "string" or id == "" then return true end
                     local def = styleDef(id)
@@ -999,6 +1152,42 @@ do
                     local result = {}
                     for i=1,math.min(#parts,8) do result[#result+1] = parts[i].text end
                     return table.concat(result, "; ")
+                end
+
+                -- v1.0.51: bedakan slot yang benar-benar penuh style terlindungi
+                -- dari data slot/rarity yang belum tersinkron.
+                -- true = ada slot aman; false = pasti tidak ada; nil = belum pasti.
+                local function kijoSlotAvailability()
+                    local slots = readSignal(teamA and teamA.Styles)
+                    if type(slots) ~= "table" then
+                        return nil, "data slot belum tersedia"
+                    end
+                    local knownSlots, uncertain = 0, 0
+                    for key, id in pairs(slots) do
+                        local idx = tonumber(key)
+                        if idx and idx >= 1 and idx % 1 == 0 then
+                            if type(id) ~= "string" or id == "" then
+                                uncertain += 1
+                            else
+                                knownSlots += 1
+                                local rank, reason = initialSlotRank(id)
+                                if rank then
+                                    return true, "slot " .. tostring(idx) .. " (" .. tostring(reason) .. ")"
+                                end
+                                -- Hanya 'dilindungi' yang membuktikan slot tidak aman.
+                                -- Rarity belum terbaca TIDAK dianggap slot habis.
+                                if type(reason) ~= "string"
+                                    or not reason:find("dilindungi", 1, true) then
+                                    uncertain += 1
+                                end
+                            end
+                        end
+                    end
+                    if knownSlots == 0 or uncertain > 0 then
+                        return nil, "slot/rarity belum pasti (terbaca="
+                            .. tostring(knownSlots) .. ", belum siap=" .. tostring(uncertain) .. ")"
+                    end
+                    return false, "semua slot terlindungi: " .. slotSummary(slots)
                 end
 
                 -- v1.0.47: lebih tahan. SelectSlot ditunggu 10 detik; data yang
@@ -1361,6 +1550,22 @@ do
                     kijoFinished = true
                 end
 
+                -- Tidak ada slot aman: selesai dengan Mamori saja, TANPA spin,
+                -- TANPA rejoin Pity, TANPA rollback Kijo.
+                local function stopKijoNoSlot(reason)
+                    -- Konfirmasi ulang untuk menghindari false positive saat inventori refresh.
+                    task.wait(0.4)
+                    if hasMamori() ~= true or hasKijoStyle() ~= false then return false end
+                    local available, detail = kijoSlotAvailability()
+                    if available ~= false then return false end
+                    kijoFinished = true
+                    finishToZero()
+                    kijoStatus("STOP Kijo: tidak ada slot aman. Webhook final Mamori saja. "
+                        .. tostring(detail or reason))
+                    notifyFinal(false, "NO_SLOT_KIJO")
+                    return true
+                end
+
                 local function runKijoSpin()
                     if kijoStarted then return end
                     kijoStarted = true
@@ -1371,8 +1576,14 @@ do
                         ctrl = getStyleContext()
                         rollRF = rollRF or findStyleRemote("Roll")
                         selectRF = selectRF or findStyleRemote("SelectSlot")
-                        -- v1.0.47: Roll RF opsional (ada fallback Knit).
+                        -- v1.0.52: bila semua slot Kijo terlindungi, final
+                        -- webhook tidak perlu menunggu remote SelectSlot.
+                        -- Bila masih ada slot aman, syarat remote tetap seperti semula.
                         if ctrl and selectRF then break end
+                        if ctrl then
+                            local available = kijoSlotAvailability()
+                            if available == false then break end
+                        end
                         if os.clock() - lastContextStatus > 5 then
                             lastContextStatus = os.clock()
                             kijoStatus("Menunggu konteks Style: controller=" .. tostring(ctrl ~= nil)
@@ -1386,6 +1597,18 @@ do
                     if kijoBefore == nil then
                         kijoStatus("Inventory Kijo belum siap; tunggu sinkronisasi")
                         return
+                    end
+                    -- Cek sebelum komit Lucky, pemilihan Pity, rejoin, atau rollback.
+                    if kijoBefore == false then
+                        local available, detail = kijoSlotAvailability()
+                        if available == false then
+                            if stopKijoNoSlot(detail) then return end
+                            kijoStatus("Status slot berubah saat konfirmasi; periksa ulang")
+                            return
+                        elseif available == nil then
+                            kijoStatus("Menunggu kepastian slot Kijo: " .. tostring(detail))
+                            return
+                        end
                     end
                     local luckyBeforeCleanup = readSignal(ctrl.LuckySpins)
                     if kijoBefore == false and type(luckyBeforeCleanup) == "number"
@@ -1446,6 +1669,11 @@ do
                     for _ = 1, 5 do
                         slotReady, slotReason = chooseSafeStyleSlot(selectRF)
                         if slotReady then break end
+                        local available, detail = kijoSlotAvailability()
+                        if available == false then
+                            if stopKijoNoSlot(detail) then return end
+                            return -- data berubah; worker recovery akan mencoba lagi
+                        end
                         kijoStatus("Slot belum siap, ulang: " .. tostring(slotReason))
                         task.wait(1)
                     end
@@ -1483,6 +1711,11 @@ do
                                 else
                                     local okSlot, why = chooseSafeStyleSlot(selectRF)
                                     if not okSlot then
+                                        local available, detail = kijoSlotAvailability()
+                                        if available == false then
+                                            if stopKijoNoSlot(detail) then return end
+                                            return -- data berubah; worker recovery akan mencoba lagi
+                                        end
                                         slotFails += 1
                                         kijoStatus("Slot belum aman (" .. slotFails .. "/10): " .. tostring(why))
                                         if slotFails >= 10 then return end
@@ -1555,6 +1788,9 @@ do
                 local secretAbilityMonitorStarted = false
                 local lastGateText, lastGateAt = nil, -100
                 while playerA.Parent do
+                    if env[noSlotMamoriKey] == true then
+                        notifyFinal(false, "NO_SLOT_MAMORI")
+                    end
                     local mamori = hasMamori()
                     if not kijoLaunched and not kijoFinished then
                         local stage = readStage()
@@ -5291,7 +5527,7 @@ if stage == "ROLL" then
 -- Berdasarkan V4 yang telah diuji di Delta.
 -- Prioritas: Common -> style aman -> Rintaro/Kimiro.
 -- Mamori, Secret lainnya, Ultra, Evo tidak dipilih.
--- Jika tidak tersedia slot cocok: keluar dari game.
+-- Jika seluruh slot terlindungi: berhenti dan kirim webhook.
 -- Jika slot berganti dan terverifikasi: rejoin place yang sama.
 -- Jika slot sesuai sejak awal: tidak rejoin.
 -- =====================================================================
@@ -5480,12 +5716,12 @@ do
                         teamSel = knit.GetController("TeamSelectionController")
                     end)
                 end
-                if selectSlotRF and styleMod and teamSel and getCurrent() and getStyles() then
+                if styleMod and teamSel and getCurrent() and getStyles() then
                     break
                 end
                 task.wait(0.2)
             end
-            if not (selectSlotRF and styleMod and teamSel and getCurrent() and getStyles()) then
+            if not (styleMod and teamSel and getCurrent() and getStyles()) then
                 warn("[STYLE] Data style belum siap; AutoSpin ditahan.")
                 return false
             end
@@ -5519,10 +5755,53 @@ do
             end
             local target = commonTarget or normalTarget or exceptionTarget
             if not target then
-                task.wait(2)
-                if player and player.Parent then
-                    player:Kick("Tidak ada slot style yang memenuhi syarat.")
+                -- v1.0.52: hanya final jika SEMUA slot pasti terlindungi.
+                -- Data yang belum siap tidak boleh memicu webhook final.
+                local function protectedSnapshot()
+                    local raw = getStyles()
+                    local entries = scan()
+                    if type(raw) ~= "table" or type(entries) ~= "table"
+                        or #entries == 0 then return nil end
+                    local numericCount = 0
+                    for key in pairs(raw) do
+                        local n = tonumber(key)
+                        if n and n >= 1 and n % 1 == 0 then
+                            numericCount += 1
+                        end
+                    end
+                    if numericCount ~= #entries then return nil end
+                    local signature = {}
+                    for _, entry in ipairs(entries) do
+                        if entry.cls ~= "TERLINDUNGI" then return nil end
+                        signature[#signature+1] = tostring(entry.slot)
+                            .. "=" .. tostring(entry.id)
+                    end
+                    return table.concat(signature, "|")
                 end
+                local first = protectedSnapshot()
+                if first then
+                    task.wait(1)
+                    local second = protectedSnapshot()
+                    if second and first == second then
+                        local env = (typeof(getgenv) == "function" and getgenv()) or _G
+                        local uid = tostring(player.UserId)
+                        env["__VL_MAMORI_NO_SLOT_" .. uid] = true
+                        print("[STYLE] STOP Mamori: semua slot terlindungi;"
+                            .. " kirim webhook final berisi semua style langka.")
+                        local notifier = env["__VL_FINAL_NOTIFY_" .. uid]
+                        if type(notifier) == "function" then
+                            pcall(notifier, false, "NO_SLOT_MAMORI")
+                        end
+                        return false
+                    end
+                end
+                warn("[STYLE] Belum ada slot aman, tetapi data slot/rarity"
+                    .. " belum pasti. AutoSpin ditahan; tanpa Kick/webhook palsu.")
+                return false
+            end
+
+            if not selectSlotRF then
+                warn("[STYLE] SelectSlot belum tersedia; AutoSpin ditahan.")
                 return false
             end
 
@@ -5565,7 +5844,7 @@ do
         end
 
         -- Jika slot baru dipilih, rejoin sedang dicoba lalu skrip ini berhenti;
-        -- jika tidak ada style aman, keluar. Jika slot sudah benar, lanjut.
+        -- jika semua slot terlindungi, webhook final. Jika slot benar, lanjut.
         __mamoriTrace("SEBELUM selectSafeStyle()")
         if not selectSafeStyle() then
             __mamoriTrace("selectSafeStyle() FALSE -> keluar sebelum AutoSpin")
