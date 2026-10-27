@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.52
+-- VERSION: v1.0.53
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -785,6 +785,32 @@ do
                     if type(slots) ~= "table" or not idx then return nil end
                     return slots[idx] or slots[tostring(idx)]
                 end
+                -- v1.0.53: batas 30 Lucky Style Spins KHUSUS fase Kijo.
+                -- Menghitung penurunan saldo yang terkonfirmasi, termasuk
+                -- Lucky yang digunakan saat membersihkan Mamori duplikat.
+                -- State berada di luar worker agar recovery tidak mereset hitungan.
+                local MAX_KIJO_LUCKY_SPENT = 30
+                local kijoLuckySpent = 0
+                local kijoLuckyLast = nil
+                local kijoLuckyPendingBefore = nil
+                local function observeKijoLucky(balance)
+                    if type(balance) ~= "number" then return nil end
+                    if type(kijoLuckyLast) == "number" and balance < kijoLuckyLast then
+                        kijoLuckySpent += (kijoLuckyLast - balance)
+                        kijoStatus("Lucky Kijo terpakai " .. tostring(kijoLuckySpent)
+                            .. "/" .. tostring(MAX_KIJO_LUCKY_SPENT)
+                            .. " | Sisa saldo " .. tostring(balance))
+                    end
+                    kijoLuckyLast = balance
+                    if kijoLuckyPendingBefore and balance < kijoLuckyPendingBefore then
+                        kijoLuckyPendingBefore = nil
+                    end
+                    return kijoLuckySpent
+                end
+                local function kijoLuckyCapReached()
+                    return kijoLuckySpent >= MAX_KIJO_LUCKY_SPENT
+                end
+
                 local lastDuplicateAttempt = -100
                 local function findDuplicateMamori()
                     local slots = readSignal(teamA and teamA.Styles)
@@ -828,6 +854,7 @@ do
                     if not keep then return false, "Tidak bisa menentukan Mamori yang dipertahankan" end
                     local lucky = readSignal(ctrl and ctrl.LuckySpins)
                     local normal = readSignal(ctrl and ctrl.Spins)
+                    observeKijoLucky(lucky)
                     if type(lucky) ~= "number" or type(normal) ~= "number" then
                         return false, "Jumlah spin belum tersinkron"
                     end
@@ -837,6 +864,12 @@ do
                         return "NO_SPINS"
                     end
                     local useLucky = normal <= 0
+                    if useLucky and kijoLuckyCapReached() then
+                        return false, "LUCKY_CAP"
+                    end
+                    if useLucky and kijoLuckyPendingBefore then
+                        return false, "LUCKY_PENDING"
+                    end
                     kijoStatus("Mamori duplikat: pertahankan slot " .. tostring(keep)
                         .. ", spin ULANG slot " .. tostring(extra)
                         .. (useLucky and " (Lucky)" or " (Normal)"))
@@ -872,6 +905,7 @@ do
                         kijoStatus("Spin duplikat ditolak: " .. tostring(result))
                         return false, "Server menolak roll duplikat"
                     end
+                    if useLucky then kijoLuckyPendingBefore = lucky end
                     local startCount = useLucky and lucky or normal
                     local changed = false
                     for _ = 1, 40 do
@@ -882,6 +916,7 @@ do
                             break
                         end
                         local now = readSignal(useLucky and ctrl.LuckySpins or ctrl.Spins)
+                        if useLucky then observeKijoLucky(now) end
                         if type(now) == "number" and now < startCount then
                             changed = true
                             break
@@ -891,6 +926,7 @@ do
                         kijoStatus("Spin duplikat belum terkonfirmasi; tahan spin berikutnya")
                         return false, "Hasil roll duplikat belum sinkron"
                     end
+                    if useLucky then observeKijoLucky(readSignal(ctrl.LuckySpins)) end
                     local after = findDuplicateMamori()
                     kijoStatus("Spin Mamori duplikat selesai; sisa Mamori="
                         .. tostring(after and #after or "belum sinkron"))
@@ -1483,13 +1519,19 @@ do
                     end)
                     if not okCtrl or not ctrl then return false end
                     local remaining = readSignal(ctrl.LuckySpins)
-                    if type(remaining) ~= "number" or remaining > 0 then return false end
+                    observeKijoLucky(remaining)
+                    if type(remaining) ~= "number" then return false end
+                    if remaining > 0 and not kijoLuckyCapReached() then return false end
                     if not toZeroWasCommitted() then
                         return false
                     end
                     lastKijoRollbackAttempt = os.clock()
                     kijoRollbackInFlight = true
-                    kijoStatus("Lucky habis (0), Kijo belum ada: ROLLBACK seperti Mamori")
+                    kijoStatus((kijoLuckyCapReached()
+                        and ("Batas " .. tostring(MAX_KIJO_LUCKY_SPENT)
+                            .. " Lucky Kijo tercapai, saldo=" .. tostring(remaining))
+                        or "Lucky habis (0)")
+                        .. ", Kijo belum ada: ROLLBACK seperti Mamori")
                     local ok, err = pcall(function()
                         local remote = RSA:WaitForChild("Packages")
                             :WaitForChild("_Index")
@@ -1566,8 +1608,21 @@ do
                     return true
                 end
 
+                -- Prioritaskan aturan NO SLOT (webhook) dibanding rollback
+                -- apabila roll terakhir membuat semua slot terlindungi.
+                local function kijoRollbackOrNoSlot(reason)
+                    if hasKijoStyle() == true then
+                        kijoDone()
+                        return
+                    end
+                    local available, detail = kijoSlotAvailability()
+                    if available == false and stopKijoNoSlot(detail) then return end
+                    if reason then kijoStatus(reason) end
+                    rollbackKijoOnce()
+                end
+
                 local function runKijoSpin()
-                    if kijoStarted then return end
+                    if kijoStarted or kijoRollbackInFlight then return end
                     kijoStarted = true
                     kijoStatus("Memulai Kijo worker")
                     local ctrl, rollRF, selectRF
@@ -1593,6 +1648,7 @@ do
                         task.wait(0.3)
                     end
                     if not playerA.Parent then return end
+                    observeKijoLucky(readSignal(ctrl and ctrl.LuckySpins))
                     local kijoBefore = hasKijoStyle()
                     if kijoBefore == nil then
                         kijoStatus("Inventory Kijo belum siap; tunggu sinkronisasi")
@@ -1623,7 +1679,12 @@ do
                         return
                     end
                     local dupOK, dupWhy = clearAllDuplicates(ctrl, rollRF, selectRF)
+                    observeKijoLucky(readSignal(ctrl.LuckySpins))
                     if dupOK == false then
+                        if dupWhy == "LUCKY_CAP" or kijoLuckyCapReached() then
+                            kijoRollbackOrNoSlot("Batas 30 Lucky Kijo saat pembersihan duplikat")
+                            return
+                        end
                         kijoStatus("Duplikat Mamori belum tuntas: " .. tostring(dupWhy))
                         return
                     end
@@ -1634,6 +1695,7 @@ do
                         return
                     end
                     local lucky = readSignal(ctrl.LuckySpins)
+                    observeKijoLucky(lucky)
                     if type(lucky) ~= "number" then
                         kijoStatus("Lucky Style Spins belum dimuat")
                         warn("[KIJO] Lucky Style Spins belum dapat dibaca; tidak melakukan spin.")
@@ -1658,9 +1720,15 @@ do
                         kijoStarted = false
                         return
                     end
-                    if lucky <= 0 then
-                        kijoStatus("Lucky 0, pencarian Kijo AKTIF: ROLLBACK seperti Mamori")
-                        rollbackKijoOnce()
+                    if lucky <= 0 or kijoLuckyCapReached() then
+                        kijoStatus(kijoLuckyCapReached()
+                            and "Batas 30 Lucky Kijo tercapai: ROLLBACK"
+                            or "Lucky 0, pencarian Kijo AKTIF: ROLLBACK seperti Mamori")
+                        kijoRollbackOrNoSlot()
+                        return
+                    end
+                    if kijoLuckyPendingBefore then
+                        kijoStatus("Menunggu konfirmasi Lucky Kijo sebelumnya; tahan spin baru")
                         return
                     end
 
@@ -1682,8 +1750,23 @@ do
 
                     local slotFails = 0
                     while playerA.Parent do
+                        if kijoRollbackInFlight then return end
+                        local currentBudgetLucky = readSignal(ctrl.LuckySpins)
+                        observeKijoLucky(currentBudgetLucky)
+                        if kijoLuckyCapReached() then
+                            kijoRollbackOrNoSlot("30 Lucky Kijo sudah digunakan")
+                            return
+                        end
+                        if kijoLuckyPendingBefore then
+                            kijoStatus("Menunggu saldo Lucky Kijo terkonfirmasi sebelum spin lain")
+                            return
+                        end
                         local dupOK2, dupWhy2 = clearAllDuplicates(ctrl, rollRF, selectRF)
                         if dupOK2 == false then
+                            if dupWhy2 == "LUCKY_CAP" or kijoLuckyCapReached() then
+                                kijoRollbackOrNoSlot("Batas Lucky Kijo saat pembersihan duplikat")
+                                return
+                            end
                             kijoStatus("Tunda: duplikat Mamori belum tuntas: " .. tostring(dupWhy2))
                             task.wait(1)
                         else
@@ -1696,17 +1779,16 @@ do
                                 task.wait(0.3)
                             else
                                 local currentLucky = readSignal(ctrl.LuckySpins)
+                                observeKijoLucky(currentLucky)
                                 if type(currentLucky) ~= "number" then
                                     task.wait(0.3)
-                                elseif currentLucky <= 0 then
+                                elseif currentLucky <= 0 or kijoLuckyCapReached() then
                                     -- Sama seperti Mamori: tunggu 1 detik, cek, baru rollback.
-                                    kijoStatus("Lucky habis, cek Kijo")
+                                    kijoStatus(kijoLuckyCapReached()
+                                        and "30 Lucky Kijo digunakan, cek Kijo sebelum rollback"
+                                        or "Lucky habis, cek Kijo")
                                     task.wait(1)
-                                    if hasKijoStyle() == true then
-                                        kijoDone()
-                                    else
-                                        rollbackKijoOnce()
-                                    end
+                                    kijoRollbackOrNoSlot()
                                     return
                                 else
                                     local okSlot, why = chooseSafeStyleSlot(selectRF)
@@ -1733,6 +1815,9 @@ do
                                         elseif a == false then
                                             task.wait(0.5) -- server menolak, sama seperti Mamori
                                         else
+                                            -- Satu roll Lucky diterima: tunggu saldo turun
+                                            -- sebelum mengizinkan roll berikutnya.
+                                            kijoLuckyPendingBefore = currentLucky
                                             kijoStatus("Hasil roll: a=" .. describeResult(a):sub(1, 90)
                                                 .. " | b=" .. describeResult(b):sub(1, 60))
                                             if resultIsKijo(a) or resultIsKijo(b) then
@@ -1750,6 +1835,21 @@ do
                                                     return
                                                 end
                                                 kijoStatus("Remote menyebut Kijo tapi TIDAK ada di inventori: diabaikan, lanjut")
+                                            end
+                                            for _ = 1, 25 do
+                                                local afterLucky = readSignal(ctrl.LuckySpins)
+                                                observeKijoLucky(afterLucky)
+                                                if not kijoLuckyPendingBefore then break end
+                                                if hasKijoStyle() == true then
+                                                    kijoDone()
+                                                    return
+                                                end
+                                                task.wait(0.2)
+                                            end
+                                            if kijoLuckyPendingBefore then
+                                                kijoStatus("Saldo Lucky belum berubah setelah roll Kijo;"
+                                                    .. " tahan spin agar batas 30 tidak terlewati")
+                                                return
                                             end
                                             task.wait(0.55) -- jeda tetap
                                         end
@@ -5697,6 +5797,31 @@ do
         end
 
 
+        -- Dipakai juga oleh worker Mamori sesudah roll; klasifikasi sama
+        -- persis dengan seleksi slot awal, tidak mengarang rarity.
+        local function allMamoriSlotsProtectedSnapshot()
+            local raw = getStyles()
+            local entries = scan()
+            if type(raw) ~= "table" or type(entries) ~= "table"
+                or #entries == 0 then return nil end
+            local numericCount = 0
+            for key in pairs(raw) do
+                local n = tonumber(key)
+                if n and n >= 1 and n % 1 == 0 then numericCount += 1 end
+            end
+            if numericCount ~= #entries then return nil end
+            local signature = {}
+            for _, entry in ipairs(entries) do
+                if entry.cls ~= "TERLINDUNGI" then return nil end
+                signature[#signature + 1] = tostring(entry.slot)
+                    .. "=" .. tostring(entry.id)
+            end
+            return table.concat(signature, "|")
+        end
+        local envNoSlot = (typeof(getgenv) == "function" and getgenv()) or _G
+        envNoSlot["__VL_MAMORI_ALL_PROTECTED_" .. tostring(player.UserId)] =
+            allMamoriSlotsProtectedSnapshot
+
         local function selectSafeStyle()
             -- Menunggu remote dan data slot seperti V4; jika belum siap, hentikan
             -- proses agar tidak spin dengan slot langka yang sedang aktif.
@@ -6231,6 +6356,27 @@ local TeamSel
 local running = true
 local targetFound = false
 
+-- v1.0.53: maksimum 30 Lucky Style Spins untuk fase Mamori.
+-- Hanya saldo Lucky yang benar-benar berkurang dihitung.
+local MAX_MAMORI_LUCKY_SPENT = 30
+local mamoriLuckySpent = 0
+local mamoriLuckyLast = nil
+local mamoriLuckyPendingBefore = nil
+local lastMamoriPendingLog = -100
+local function observeMamoriLucky(balance)
+    if type(balance) ~= "number" then return nil end
+    if type(mamoriLuckyLast) == "number" and balance < mamoriLuckyLast then
+        mamoriLuckySpent += (mamoriLuckyLast - balance)
+        print("[AutoSpin] Lucky Mamori terpakai:", mamoriLuckySpent,
+            "/" .. tostring(MAX_MAMORI_LUCKY_SPENT), "saldo:", balance)
+    end
+    mamoriLuckyLast = balance
+    if mamoriLuckyPendingBefore and balance < mamoriLuckyPendingBefore then
+        mamoriLuckyPendingBefore = nil
+    end
+    return mamoriLuckySpent
+end
+
 repeat
     task.wait(0.2)
 
@@ -6362,6 +6508,28 @@ local function hasMamori()
     end
 
     return found
+end
+
+-- v1.0.53: jika slot terakhir berubah menjadi Secret/Ultra/Evo,
+-- pertahankan aturan webhook NO SLOT, bukan rollback batas 30.
+local function stopMamoriIfNoSafeSlot()
+    local uid = tostring(Player.UserId)
+    local checker = cacheEnv["__VL_MAMORI_ALL_PROTECTED_" .. uid]
+    if type(checker) ~= "function" then return false end
+    local ok, first = pcall(checker)
+    if not ok or type(first) ~= "string" then return false end
+    task.wait(0.4)
+    local ok2, second = pcall(checker)
+    if not ok2 or first ~= second or hasMamori() then return false end
+    cacheEnv["__VL_MAMORI_NO_SLOT_" .. uid] = true
+    local notifier = cacheEnv["__VL_FINAL_NOTIFY_" .. uid]
+    if type(notifier) == "function" then
+        pcall(notifier, false, "NO_SLOT_MAMORI")
+    end
+    print("[AutoSpin] Semua slot Mamori terlindungi -> STOP dan webhook")
+    running = false
+    clearFlag()
+    return true
 end
 
 local function stopSuccess()
@@ -6598,6 +6766,25 @@ task.spawn(function()
                 and StyleCtrl.LuckySpins:get()
                 or 0
         end)
+        observeMamoriLucky(lucky)
+
+        if stopMamoriIfNoSafeSlot() then break end
+        if mamoriLuckySpent >= MAX_MAMORI_LUCKY_SPENT then
+            print("[AutoSpin] BATAS 30 Lucky Mamori tercapai -> rollback")
+            saveFlag()
+            doRollback()
+            running = false
+            break
+        end
+        if mamoriLuckyPendingBefore then
+            if os.clock() - lastMamoriPendingLog > 6 then
+                lastMamoriPendingLog = os.clock()
+                warn("[AutoSpin] Menunggu saldo Lucky Mamori berkurang;"
+                    .. " spin baru ditahan agar tidak melebihi 30")
+            end
+            task.wait(0.5)
+            continue
+        end
 
         if spins <= 0 and lucky <= 0 then
             print("[AutoSpin] Semua spin habis -> STOP")
@@ -6645,6 +6832,29 @@ task.spawn(function()
                 break
             end
 
+            if lucky > 0 then
+                mamoriLuckyPendingBefore = lucky
+                -- Jangan mengirim roll Lucky berikutnya sebelum saldo
+                -- mengonfirmasi pengurangan roll yang baru diterima.
+                for _ = 1, 25 do
+                    local afterValue
+                    pcall(function() afterValue = StyleCtrl.LuckySpins:get() end)
+                    observeMamoriLucky(afterValue)
+                    if not mamoriLuckyPendingBefore then break end
+                    if hasMamori() then
+                        stopSuccess()
+                        return
+                    end
+                    task.wait(0.2)
+                end
+                if mamoriLuckyPendingBefore then
+                    warn("[AutoSpin] Roll Lucky Mamori diterima tetapi saldo belum"
+                        .. " turun; menunggu sinkronisasi, tidak spin lagi")
+                    task.wait(0.5)
+                    continue
+                end
+            end
+
             local luckyAfter = 0
 
             pcall(function()
@@ -6652,8 +6862,9 @@ task.spawn(function()
                     and StyleCtrl.LuckySpins:get()
                     or 0
             end)
+            observeMamoriLucky(luckyAfter)
 
-            if luckyAfter <= 0 then
+            if luckyAfter <= 0 or mamoriLuckySpent >= MAX_MAMORI_LUCKY_SPENT then
 
                 -- CEK SEBELUM ROLLBACK
                 if hasMamori() then
@@ -6661,7 +6872,9 @@ task.spawn(function()
                     break
                 end
 
-                print("[AutoSpin] Lucky habis, memeriksa Mamori")
+                print(mamoriLuckySpent >= MAX_MAMORI_LUCKY_SPENT
+                    and "[AutoSpin] Batas 30 Lucky tercapai, memeriksa Mamori"
+                    or "[AutoSpin] Lucky habis, memeriksa Mamori")
 
                 -- TUNGGU UPDATE DATA
                 task.wait(1)
@@ -6672,6 +6885,7 @@ task.spawn(function()
                 end
 
                 -- MAMORI BELUM TERDETEKSI
+                if stopMamoriIfNoSafeSlot() then break end
                 saveFlag()
                 doRollback()
                 running = false
