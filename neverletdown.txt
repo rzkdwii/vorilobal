@@ -1,5 +1,6 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.48
+-- VERSION: v1.0.49
+-- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1562820396351234150/L0KfBvDgOWwsWWGuPW5-AFNg-tsHNUWKsjhnjxYyyGM_weXP2IzaJvqNopINfbnSJpRN"
@@ -1158,6 +1159,10 @@ do
                     warn("[KIJO] Callback asli Kijo belum ditemukan.")
                     return false
                 end
+                -- v1.0.50: bedakan Pity yang baru dipilih dalam sesi ini
+                -- dari penanda Pity yang diwarisi sesudah rejoin.
+                -- JobId yang sama tidak berarti rejoin gagal.
+                local pitySelectedThisSession = false
                 local lastPityTp = 0
                 local function rejoinForKijoPity()
                     if os.clock() - lastPityTp < 15 then return end
@@ -1168,25 +1173,28 @@ do
                 end
                 local function readyAfterKijoPityRejoin()
                     local pending = pityPending()
-                    if pending then
-                        if pending == tostring(game.JobId) then
-                            kijoStatus("Pity Kijo dipilih: perlu rejoin sebelum spin")
-                            rejoinForKijoPity()
-                            return false
-                        end
-                        if preferredKijo() == true then
-                            clearPityPending()
-                            print("[KIJO] Rejoin Pity selesai dan Kijo3 terkonfirmasi.")
-                            return true
-                        end
-                        kijoStatus("Setelah rejoin, Kijo3 belum tersimpan: pilih Pity ulang")
-                        warn("[KIJO] Setelah rejoin Kijo3 tidak tersimpan. Proses Kijo dihentikan; periksa Pity.")
-                        return false
-                    end
                     local chosen = preferredKijo()
                     if chosen == nil then
                         kijoStatus("Menunggu data PreferredSecret dari game")
                         return false
+                    end
+                    if pending then
+                        if chosen == true then
+                            if pitySelectedThisSession then
+                                -- Pilihan dibuat pada sesi ini: rejoin sekali untuk simpan.
+                                kijoStatus("Pity Kijo3 baru dipilih: menunggu rejoin penyimpanan")
+                                rejoinForKijoPity()
+                                return false
+                            end
+                            -- Penanda berasal dari sesi sebelumnya. Tetap sah
+                            -- meskipun rejoin masuk kembali ke JobId yang sama.
+                            clearPityPending()
+                            kijoStatus("Pity Kijo3 terkonfirmasi setelah rejoin; lanjut spin")
+                            return true
+                        end
+                        -- Pilihan belum tersimpan/berubah: jangan teleport loop.
+                        clearPityPending()
+                        kijoStatus("Pity Kijo3 belum terkonfirmasi; pilih ulang")
                     end
                     if chosen == true then
                         return true
@@ -1200,6 +1208,7 @@ do
                         warn("[KIJO] Gagal menulis penanda lokal; spin dibatalkan.")
                         return false
                     end
+                    pitySelectedThisSession = true
                     kijoStatus("Pity Kijo3 dipilih: rejoin penyimpanan")
                     rejoinForKijoPity()
                     return false
@@ -1600,15 +1609,11 @@ do
                                         end
                                     end)
                                 end
-                                if not kijoLaunched and not kijoFinished
-                                    and pityPending() ~= tostring(game.JobId) then
+                                if not kijoLaunched and not kijoFinished then
+                                    -- Worker Pity sendiri memvalidasi pilihan dan
+                                    -- rejoin; jangan blokir berdasarkan JobId.
                                     kijoLaunched = true
                                     runKijoWithRecovery()
-                                elseif pityPending() == tostring(game.JobId) then
-                                    if os.clock() - lastGateAt > 4 then
-                                        kijoStatus("Pity tersimpan di server ini: ulangi rejoin sebelum spin")
-                                    end
-                                    rejoinForKijoPity()
                                 end
                             end
                         end
@@ -4094,7 +4099,9 @@ local TEAM_RETRY_DELAY = 0.85
 local TEAM_SANITY_INTERVAL = 2.00
 local teamGeneration = 0
 local teamCycleRunningGeneration = nil
+local teamCycleStartedAt = 0  -- v1.0.49: watchdog generasi; tidak melewati konfirmasi team.
 local correctionRunningGeneration = nil
+local correctionStartedAt = 0  -- v1.0.49: deteksi koreksi team yang tidak selesai
 local teamJoinFinished = false
 local lockedTeamId = nil
 local lockedRosterSignature = nil
@@ -4241,8 +4248,12 @@ local function launchTeamCycle()
         return
     end
     teamCycleRunningGeneration = generation
+    teamCycleStartedAt = os.clock()
     task.spawn(function()
-        runTeamCycle(generation)
+        local ok, err = pcall(runTeamCycle, generation)
+        if not ok then
+            warn("[LEVEL RECOVERY] Team cycle error: " .. tostring(err))
+        end
         if teamCycleRunningGeneration == generation then
             teamCycleRunningGeneration = nil
         end
@@ -4254,6 +4265,7 @@ local function invalidateTeamAssignment(startImmediately)
     lockedTeamId = nil
     lockedRosterSignature = nil
     correctionRunningGeneration = nil
+    correctionStartedAt = 0
     if startImmediately and not roundResetActive then
         launchTeamCycle()
     end
@@ -4291,24 +4303,31 @@ local function correctLockedTeam()
         return
     end
     correctionRunningGeneration = generation
+    correctionStartedAt = os.clock()
     teamJoinFinished = false
     local targetTeamId = lockedTeamId
     task.spawn(function()
-        while generationIsCurrent(generation)
-            and not roundResetActive
-            and lockedTeamId == targetTeamId
-        do
-            if teamLooksConfirmed(targetTeamId) then
-                if waitForStableLocalConfirmation(generation, targetTeamId) then
-                    teamJoinFinished = true
-                    break
+        local ok, err = pcall(function()
+            while generationIsCurrent(generation)
+                and not roundResetActive
+                and lockedTeamId == targetTeamId
+            do
+                if teamLooksConfirmed(targetTeamId) then
+                    if waitForStableLocalConfirmation(generation, targetTeamId) then
+                        teamJoinFinished = true
+                        break
+                    end
                 end
+                joinTeam(targetTeamId)
+                task.wait(TEAM_RETRY_DELAY)
             end
-            joinTeam(targetTeamId)
-            task.wait(TEAM_RETRY_DELAY)
+        end)
+        if not ok then
+            warn("[LEVEL RECOVERY] Team correction error: " .. tostring(err))
         end
         if correctionRunningGeneration == generation then
             correctionRunningGeneration = nil
+            correctionStartedAt = 0
         end
     end)
 end
@@ -4329,6 +4348,14 @@ local function sanityCheckTeam()
         correctLockedTeam()
         return
     end
+    -- v1.0.49: game mengonfirmasi team namun gate internal belum TRUE.
+    -- Jika tak ada worker aktif, ulang konfirmasi, jangan memalsukan gate.
+    if not teamJoinFinished
+        and teamCycleRunningGeneration == nil
+        and correctionRunningGeneration == nil then
+        launchTeamCycle()
+        return
+    end
     local sameTeamPartner = findSameTeamPartner()
     if sameTeamPartner then
         local snapshot = getPresentConfiguredPlayerObjects()
@@ -4339,17 +4366,22 @@ local function sanityCheckTeam()
         end
     end
 end
+local roundResetStartedAt = 0
 local function beginRoundTeamReset()
     if roundResetActive then return end
     roundResetActive = true
+    roundResetStartedAt = os.clock()
     teamGeneration = teamGeneration + 1
     teamJoinFinished = false
     lockedTeamId = nil
     lockedRosterSignature = nil
     correctionRunningGeneration = nil
+    correctionStartedAt = 0
 end
 local function finishRoundTeamReset()
+    if not roundResetActive then return end
     roundResetActive = false
+    roundResetStartedAt = 0
     invalidateTeamAssignment(true)
 end
 local watchedTeamPlayers = {}
@@ -4575,25 +4607,203 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 task.wait(0.1)
+-- v1.0.49: worker startup bisa dimulai ulang setelah error/return prematur,
+-- tanpa mengganti mekanisme skip tutorial, team join, atau deteksi server.
 local startupGatePassed = false
-task.spawn(function()
-    -- Jangan RequestJoin/Serve saat Coach tutorial masih mengatur state UI.
-    -- Hanya worker team yang menunggu; modul auto-level/UI sudah tetap ter-load.
-    -- Tutorial bukan prasyarat jika memang TIDAK aktif.
-    -- Jika belum selesai, tunggu; tetapi apabila tidak ada tutorial, lanjut segera.
-    while detectorIsCurrent() and not tutorialGateFinished do
-        task.wait(0.20)
-    end
-    if not detectorIsCurrent() or not tutorialGateCleared or tutorialStillActive() then
-        return
-    end
+local startupState = "WAIT_TUTORIAL"
+local startupWorkerActive = false
+local startupLastAttempt = -100
+local function launchStartupWorker()
+    if startupGatePassed or startupWorkerActive or not detectorIsCurrent() then return end
+    if os.clock() - startupLastAttempt < 8 then return end
+    startupLastAttempt = os.clock()
+    startupWorkerActive = true
+    task.spawn(function()
+        local ok, err = pcall(function()
+            startupState = "WAIT_TUTORIAL"
+            while detectorIsCurrent() and not tutorialGateFinished do
+                task.wait(0.20)
+            end
+            if not detectorIsCurrent() then return end
+            if not tutorialGateCleared or tutorialStillActive() then
+                startupState = "TUTORIAL_NOT_CLEARED"
+                return
+            end
+            startupState = "WAIT_TEAM"
+            warn("[LEVEL RECOVERY] Tutorial cleared -> starting team confirmation")
+            local confirmed = initializeJoins()
+            if not confirmed or not detectorIsCurrent() then return end
+            startupState = "SERVER_CHECK"
+            runStartupDetection()
+            if detectorIsCurrent() and not rejoinStarted then
+                startupGatePassed = true
+                startupState = "READY"
+                warn("[LEVEL RECOVERY] Startup gate READY")
+            end
+        end)
+        if not ok then
+            startupState = "ERROR: " .. tostring(err):sub(1,90)
+            warn("[LEVEL RECOVERY] Startup worker error: " .. tostring(err))
+        end
+        startupWorkerActive = false
+    end)
+end
+launchStartupWorker()
 
-    warn('[STARTUP FIX] Tutorial tidak aktif/selesai -> mulai team join')
-    local confirmedTeamBeforeFeatures = initializeJoins()
-    if confirmedTeamBeforeFeatures and detectorIsCurrent() then
-        runStartupDetection()
-        if detectorIsCurrent() and not rejoinStarted then
-            startupGatePassed = true
+-- v1.0.49: backup Return dan pemulihan gate team. Jangan pernah menganggap
+-- 'player.Team ~= nil' sebagai bukti sendiri; konfirmasi lama tetap wajib.
+local recoveryLastReason = "INIT"
+local recoveryLastEventAt = os.clock()
+local gateBlockedSince = nil
+local lastTeamRecovery = -100
+local lastGameplayWorkerRecovery = -100
+local function recoveryNote(message)
+    if recoveryLastReason ~= message then
+        recoveryLastReason = message
+        recoveryLastEventAt = os.clock()
+        warn("[LEVEL RECOVERY] " .. message)
+    end
+end
+
+-- UI debug terpisah dari panel Kijo, dibuat langsung saat MAIN_SOURCE berjalan.
+local recoveryPanel
+local recoveryText = "Loading..."
+local function ensureRecoveryPanel()
+    local pg = player:FindFirstChild("PlayerGui")
+    if not pg then return end
+    if recoveryPanel and recoveryPanel.Parent == pg then return end
+    local previous = pg:FindFirstChild("LevelRecoveryDebug149")
+    if previous then previous:Destroy() end
+    local screen = Instance.new("ScreenGui")
+    screen.Name = "LevelRecoveryDebug149"
+    screen.ResetOnSpawn = false
+    screen.IgnoreGuiInset = true
+    screen.DisplayOrder = 10015
+    screen.Parent = pg
+    local button = Instance.new("TextButton")
+    button.Name = "CopyLevelRecovery"
+    button.Size = UDim2.fromOffset(320, 190)
+    button.Position = UDim2.new(0, 6, 0.18, 0)
+    button.BackgroundColor3 = Color3.fromRGB(21, 25, 35)
+    button.BackgroundTransparency = 0.08
+    button.TextColor3 = Color3.fromRGB(240, 240, 240)
+    button.TextSize = 12
+    button.TextWrapped = true
+    button.Font = Enum.Font.Code
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.TextYAlignment = Enum.TextYAlignment.Center
+    button.Parent = screen
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
+    button.Activated:Connect(function()
+        if typeof(setclipboard) == "function" then
+            pcall(setclipboard, recoveryText)
+        end
+    end)
+    recoveryPanel = screen
+end
+
+local function gateReason()
+    if not tutorialGateFinished or not tutorialGateCleared then return "TUTORIAL" end
+    if roundResetActive then return "RETURN_RESET" end
+    if not startupGatePassed then return "STARTUP:" .. startupState end
+    if not lockedTeamId then return "NO_LOCKED_TEAM" end
+    if not teamJoinFinished then return "TEAM_UNCONFIRMED" end
+    return "READY"
+end
+
+task.spawn(function()
+    local lastReport = ""
+    while detectorIsCurrent() do
+        task.wait(1)
+        local now = os.clock()
+        local blocked = gateReason()
+        if blocked == "READY" then
+            gateBlockedSince = nil
+        else
+            gateBlockedSince = gateBlockedSince or now
+        end
+        local blockedFor = gateBlockedSince and (now - gateBlockedSince) or 0
+
+        -- Backup saat thread Return berhenti/tidak menutup reset state.
+        -- Jangan reset saat tombol Return MASIH terlihat: urutan Return tetap wajib.
+        if roundResetActive and now - roundResetStartedAt >= 4 then
+            local visible = getRoundReturnButton()
+            if not visible then
+                recoveryNote("RETURN hidden -> restore team assignment")
+                finishRoundTeamReset()
+                returnClicker = false
+            elseif now - returnLastAttempt >= 5 then
+                returnLastAttempt = now
+                pcall(pressRoundReturn, visible)
+                recoveryNote("RETURN visible -> retry click")
+            end
+        end
+
+        -- Jika team cycle lokal macet >45 detik, buat generasi baru.
+        -- Tetap lewat pemeriksaan roster, team, dan partner seperti mekanisme asli.
+        if not roundResetActive and tutorialGateCleared and blockedFor >= 18
+            and now - lastTeamRecovery >= 15 and getgenv().main then
+            lastTeamRecovery = now
+            if not startupGatePassed and not startupWorkerActive then
+                recoveryNote("STARTUP worker ended -> retry")
+                launchStartupWorker()
+            elseif startupState == "WAIT_TEAM" or startupGatePassed then
+                if teamCycleRunningGeneration ~= nil
+                    and now - teamCycleStartedAt >= 45 then
+                    recoveryNote("TEAM cycle stalled >45s -> re-evaluate roster")
+                    invalidateTeamAssignment(true)
+                elseif correctionRunningGeneration ~= nil
+                    and now - correctionStartedAt >= 45 then
+                    recoveryNote("TEAM correction stalled >45s -> re-evaluate roster")
+                    invalidateTeamAssignment(true)
+                elseif not teamJoinFinished then
+                    if teamCycleRunningGeneration == nil and correctionRunningGeneration == nil then
+                        recoveryNote("TEAM not confirmed -> retry team cycle")
+                        if lockedTeamId and not teamLooksConfirmed(lockedTeamId) then
+                            correctLockedTeam()
+                        else
+                            launchTeamCycle()
+                        end
+                    else
+                        recoveryNote("TEAM confirmation in progress")
+                    end
+                end
+            end
+        end
+
+        -- Worker aksi dapat mati secara diam-diam walau boot tetap true.
+        -- Restart hanya bila gate benar-benar READY; generasi lama akan keluar
+        -- pada iterasi berikutnya, bukan dua loop aktif permanen.
+        local envRecovery = getgenv()
+        local workerTick = tonumber(envRecovery.__xynLevelActionTick149)
+        local workerAge = workerTick and (now - workerTick) or 0
+        if gateReason() == "READY" and workerTick and workerAge > 20
+            and now - lastGameplayWorkerRecovery >= 40 then
+            lastGameplayWorkerRecovery = now
+            if typeof(envRecovery.__xynRestartLevelActions149) == "function" then
+                recoveryNote("GAMEPLAY worker unresponsive >20s -> restart worker")
+                pcall(envRecovery.__xynRestartLevelActions149)
+            end
+        end
+
+        ensureRecoveryPanel()
+        local report = table.concat({
+            "LEVEL RECOVERY v1.0.49 [TAP COPY]",
+            "User=" .. player.Name .. " | Lv=" .. tostring(player:GetAttribute("User_Level")),
+            "Gate=" .. gateReason() .. " | Stuck=" .. tostring(math.floor(blockedFor)) .. "s",
+            "Tutorial=" .. tostring(tutorialGateCleared) .. " | Startup=" .. tostring(startupGatePassed),
+            "Team=" .. tostring(player.Team and player.Team.Name or "nil") .. " | ID=" .. tostring(lockedTeamId),
+            "TeamOK=" .. tostring(teamJoinFinished) .. " | Reset=" .. tostring(roundResetActive),
+            "TeamCycle=" .. tostring(teamCycleRunningGeneration) .. " | Corr=" .. tostring(correctionRunningGeneration),
+            "WorkerAge=" .. tostring(math.floor(workerAge)) .. "s",
+            "Note=" .. recoveryLastReason,
+        }, "\n")
+        recoveryText = report
+        local button = recoveryPanel and recoveryPanel:FindFirstChild("CopyLevelRecovery")
+        if button then button.Text = report end
+        if gateReason() ~= lastReport then
+            lastReport = gateReason()
+            warn("[LEVEL RECOVERY] Gate=" .. lastReport)
         end
     end
 end)
@@ -4836,6 +5046,7 @@ checkLevelExit()
 
 local jumpState = false
 local lastPrint = 0
+local gameplayWorkerGeneration = 0
 local function getBall()
 	for _, v in workspace:GetDescendants() do
 		if typeof(v.Name) == "string" and v.Name:sub(1, 12) == "CLIENT_BALL_" then
@@ -4880,8 +5091,19 @@ RunService2.Heartbeat:Connect(function()
 		end)
 	end
 end)
-task.spawn(function()
-	while detectorIsCurrent() do
+local function startLevelingActions()
+    gameplayWorkerGeneration += 1
+    local myGameplayGeneration = gameplayWorkerGeneration
+    task.spawn(function()
+        local workerOK, workerError = pcall(function()
+	while detectorIsCurrent() and gameplayWorkerGeneration == myGameplayGeneration do
+        getgenv().__xynLevelActionTick149 = os.clock()
+        -- Late-boot remotes bisa nil saat skrip awal dibaca. Refresh tanpa
+        -- mengubah payload aksi dan tanpa menambah spam request.
+        if not CreateHitbox then CreateHitbox = getRF("CreateHitbox") end
+        if not Interact then Interact = getRF("Interact") end
+        if not Jump then Jump = getRF("Jump") end
+        if not UpdateTilt then UpdateTilt = getRF("UpdateTilt") end
 		local waitT = tonumber(tb.Text) or 0.05
 		if not startupGatePassed or not teamJoinFinished or not lockedTeamId then
 			task.wait(0.25)
@@ -4983,7 +5205,15 @@ task.spawn(function()
 		end
 		task.wait(waitT)
 	end
-end)
+        end)
+        if not workerOK and detectorIsCurrent() then
+            warn("[LEVEL RECOVERY] Gameplay worker error: " .. tostring(workerError))
+        end
+    end)
+end
+getgenv().__xynRestartLevelActions149 = startLevelingActions
+getgenv().__xynLevelActionTick149 = os.clock()
+startLevelingActions()
 if __xynIsCurrentRun() then
     __env.__xynBootReadyVersion = __runVersion
     __env.__xynBootReadyAt = os.clock()
