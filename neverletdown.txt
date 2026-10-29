@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.56
+-- VERSION: v1.0.57 (Mamori rarity calibration + slot retry)
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -136,16 +136,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.56: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.57: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.56] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.57] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.56] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.57] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.56] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.57] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -218,17 +218,17 @@ do
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "KIJO v1.0.56: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "KIJO v1.0.57: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[KIJO v1.0.56] " .. kijoLastStatus
+                    local line = "[KIJO v1.0.57] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "KIJO v1.0.56: " .. kijoLastStatus
+                        kijoDebugButton.Text = "KIJO v1.0.57: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -2076,14 +2076,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[KIJO v1.0.56] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[KIJO v1.0.57] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[KIJO v1.0.56] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[KIJO v1.0.57] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -5826,9 +5826,30 @@ do
                     end
                 end
             end
-            for r in pairs(conflicts) do
-                mapping[r] = "CONFLICT"
+            -- Tambahan v1.0.57: gunakan DisplayName dari daftar aktif bila ID
+            -- referensi berbeda dari ID internal game.
+            local known = {}
+            for category, examples in pairs(referenceStyles) do
+                for _, name in ipairs(examples) do known[lower(name)] = category end
             end
+            local okActive, activeDefs = pcall(function() return styleMod:GetActive() end)
+            if okActive and type(activeDefs) == "table" then
+                for key, def in pairs(activeDefs) do
+                    if type(def) == "table" and type(def.Rarity) == "number" then
+                        local category = known[lower(def.DisplayName)]
+                            or known[lower(def.Id or key)]
+                        if category then
+                            counts[category] += 1
+                            if mapping[def.Rarity] and mapping[def.Rarity] ~= category then
+                                conflicts[def.Rarity] = true
+                            else
+                                mapping[def.Rarity] = category
+                            end
+                        end
+                    end
+                end
+            end
+            for r in pairs(conflicts) do mapping[r] = "CONFLICT" end
             return mapping, counts
         end
         local exceptionStyles = {rintaro=true, kimiro=true} -- IDs dari data pengguna / sementara
@@ -5956,6 +5977,30 @@ do
             end
 
             local all, active = scan()
+            -- Data rarity bisa terlambat masuk setelah join/rejoin.
+            -- Retry tanpa pernah menganggap rarity tak dikenal sebagai aman.
+            for attempt = 1, 10 do
+                if all then
+                    local hasSafe, hasUnknown = false, false
+                    for _, entry in ipairs(all) do
+                        if entry.cls == "COMMON" or entry.cls == "AMAN"
+                            or entry.cls == "PENGECUALIAN" then hasSafe = true end
+                        if entry.cls == "TIDAK PASTI" then hasUnknown = true end
+                        if attempt == 1 or attempt == 10 then
+                            warn("[MAMORI SLOT] #" .. tostring(entry.slot)
+                                .. " id=" .. tostring(entry.id)
+                                .. " rarity=" .. tostring(entry.rarity)
+                                .. " class=" .. tostring(entry.cls)
+                                .. " reason=" .. tostring(entry.reason))
+                        end
+                    end
+                    if hasSafe or not hasUnknown then break end
+                end
+                warn("[MAMORI SLOT] Data rarity belum lengkap, ulang "
+                    .. tostring(attempt) .. "/10")
+                task.wait(1)
+                all, active = scan()
+            end
             if not all then
                 warn("[STYLE] Tidak dapat membaca slot; AutoSpin ditahan.")
                 return false
