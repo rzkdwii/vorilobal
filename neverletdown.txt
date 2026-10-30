@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.58 (Mamori rarity calibration + slot retry)
+-- VERSION: v1.0.59 (Mamori rarity calibration + slot retry)
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -136,16 +136,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.58: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.59: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.58] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.59] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.58] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.59] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.58] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.59] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -218,21 +218,21 @@ do
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "KIJO v1.0.58: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "KIJO v1.0.59: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[KIJO v1.0.58] " .. kijoLastStatus
+                    local line = "[KIJO v1.0.59] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "KIJO v1.0.58: " .. kijoLastStatus
+                        kijoDebugButton.Text = "KIJO v1.0.59: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
-                -- v1.0.58: semua diagnostik Mamori diteruskan ke COPY DEBUG KIJO.
+                -- v1.0.59: semua diagnostik Mamori diteruskan ke COPY DEBUG KIJO.
                 local bridgeEnv = (typeof(getgenv) == "function" and getgenv()) or _G
                 bridgeEnv.__VL_DEBUG_SINK = function(message)
                     local line = tostring(message)
@@ -240,7 +240,7 @@ do
                     if #kijoLogs > 350 then table.remove(kijoLogs, 1) end
                     kijoLastStatus = line
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "v1.0.58: " .. line:sub(1, 170)
+                        kijoDebugButton.Text = "v1.0.59: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -2102,14 +2102,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[KIJO v1.0.58] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[KIJO v1.0.59] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[KIJO v1.0.58] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[KIJO v1.0.59] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -5753,6 +5753,16 @@ if stage == "REDEEM" then
 end
 
 if stage == "ROLL" then
+    -- v1.0.59: satu worker Mamori per JobId, termasuk ketika AutoExecute
+    -- memuat berkas dua kali pada sesi yang sama.
+    local mamoriSessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
+    local mamoriSessionKey = "__VL_MAMORI_ROLL_WORKER_159_" .. tostring(Player.UserId)
+    if mamoriSessionEnv[mamoriSessionKey] == game.JobId then
+        __mamoriTrace("SKIP DUPLIKAT: worker Mamori sudah aktif pada JobId ini")
+        return
+    end
+    mamoriSessionEnv[mamoriSessionKey] = game.JobId
+    __mamoriTrace("LOCK worker Mamori aktif | JobId=" .. tostring(game.JobId))
     __mamoriTrace("MASUK ROLL | PlaceId=" .. tostring(game.PlaceId))
     -- AutoSpin dimulai di PlaceId hasil server hop; tidak ada gate ID tetap.
     -- Tahap ini sengaja tetap ROLL selama rejoin akibat pemilihan style / rollback.
@@ -5859,7 +5869,7 @@ do
                     end
                 end
             end
-            -- Tambahan v1.0.58: gunakan DisplayName dari daftar aktif bila ID
+            -- Tambahan v1.0.59: gunakan DisplayName dari daftar aktif bila ID
             -- referensi berbeda dari ID internal game.
             local known = {}
             for category, examples in pairs(referenceStyles) do
@@ -6546,13 +6556,14 @@ local mamoriBudget = makePersistentLuckyBudget(
 local mamoriLuckyPendingBefore = nil
 local mamoriLuckyPendingSince = nil
 local lastMamoriPendingLog = -100
+local mamoriRecoveryLastAttempt = -100
+local mamoriRecoveryAttemptCount = 0
 local function mamoriWatch(message)
     local line = "[MAMORI WATCH] " .. tostring(message)
     print(line)
     local env = (typeof(getgenv) == "function" and getgenv()) or _G
-    if type(env.__VL_DEBUG_SINK) == "function" then
-        pcall(env.__VL_DEBUG_SINK, line)
-    end
+    -- LogService.MessageOut sudah menjembatani log ini ke panel KIJO.
+    -- Jangan kirim langsung lagi ke sink yang sama (menjadi duplikat).
 end
 print("[AutoSpin] Budget Lucky Mamori: " .. tostring(mamoriBudget.spent())
     .. "/30 (tersimpan lintas rejoin); rollback pending="
@@ -6985,10 +6996,42 @@ task.spawn(function()
                     .. " sekarang=" .. tostring(lucky) .. " normal=" .. tostring(spins)
                     .. " tunggu=" .. tostring(math.floor(age)) .. "s; roll berikut ditahan")
             end
-            -- Jangan lepaskan pending hanya berdasarkan perubahan style:
-            -- itu bisa mengirim roll ganda jika saldo server belum sinkron.
-            if age > 20 and os.clock() - lastMamoriPendingLog < 1 then
-                mamoriWatch("STALL >20s: saldo Lucky belum turun. Periksa saldo & hasil; tidak mengirim spin ganda")
+            -- Jangan lepaskan pending hanya karena hasil roll telah diterima.
+            -- Baca ulang controller; bila masih sama, rejoin untuk mengambil
+            -- snapshot saldo baru. Tidak pernah mengirim roll kedua ketika pending.
+            if age >= 30 and os.clock() - mamoriRecoveryLastAttempt >= 20 then
+                mamoriRecoveryLastAttempt = os.clock()
+                mamoriRecoveryAttemptCount += 1
+                local freshLucky
+                local okFresh, freshErr = pcall(function()
+                    local freshKnit = require(RS.Packages.Knit)
+                    local freshCtrl = freshKnit.GetController("StyleController")
+                    freshLucky = freshCtrl and freshCtrl.LuckySpins
+                        and freshCtrl.LuckySpins:get() or nil
+                end)
+                mamoriWatch("RECOVERY #" .. tostring(mamoriRecoveryAttemptCount)
+                    .. " | sebelum=" .. tostring(mamoriLuckyPendingBefore)
+                    .. " | refresh=" .. tostring(freshLucky)
+                    .. " | ok=" .. tostring(okFresh))
+                if okFresh and type(freshLucky) == "number" then
+                    observeMamoriLucky(freshLucky)
+                end
+                if mamoriLuckyPendingBefore then
+                    mamoriWatch("RECOVERY REJOIN: saldo masih pending; tidak spin ulang")
+                    local okTP, errTP = pcall(function()
+                        TeleportService:Teleport(game.PlaceId, Player)
+                    end)
+                    if not okTP then
+                        mamoriWatch("RECOVERY REJOIN gagal: " .. tostring(errTP)
+                            .. "; pending dipertahankan")
+                    else
+                        -- Setelah permintaan rejoin diterima, hentikan worker
+                        -- lokal; worker baru akan membaca saldo sesi baru.
+                        mamoriWatch("RECOVERY REJOIN diminta; hentikan worker sesi lama")
+                        running = false
+                        break
+                    end
+                end
             end
             task.wait(0.5)
             continue
@@ -7280,5 +7323,9 @@ end
         __mamoriTrace("runMamori() KEMBALI")
     else
         __mamoriTrace("GAGAL waitForSpinData() -> AutoSpin tidak dimulai")
+        -- Izinkan percobaan ulang pada sesi yang sama setelah gagal bootstrap.
+        if mamoriSessionEnv[mamoriSessionKey] == game.JobId then
+            mamoriSessionEnv[mamoriSessionKey] = nil
+        end
     end
 end
