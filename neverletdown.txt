@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.62 (engine leveling v1.0.36 identik; boot diagnostics terpisah) (restored proven v1.0.36 leveling/tutorial; KIJO retained)
+-- VERSION: v1.0.63 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling v1.0.36 retained
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -136,26 +136,26 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.62: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.63: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.62] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.63] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.62] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.63] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.62] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.63] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
--- ADD-ON MANDIRI v1.0.47: MAMORI -> KIJO
+-- ADD-ON TARGET KEDUA v1.0.63: KIJO -> TIMESKIP OKAZU
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
 --  * Pemilihan slot meniru Mamori: Common > aman > Rintaro/Kimiro (terakhir).
 --  * chooseSafeStyleSlot lebih tahan (SelectSlot tunggu 10 dtk, tidak stop
 --    hanya karena data belum sinkron).
---  * Menu Styles dibuka sebelum mencari tombol Secret Pity Kijo3.
+--  * Menu Styles dibuka sebelum mencari tombol Secret Pity TimeskipToru4.
 --  * Loop spin Kijo meniru Mamori: jeda tetap 0.55 dtk, fallback Knit,
 --    roll gagal/ditolak tidak menghentikan worker, rollback setelah Lucky 0.
 -- =====================================================================
@@ -212,27 +212,27 @@ do
                         button.Activated:Connect(function()
                             if typeof(setclipboard) == "function" then
                                 pcall(setclipboard, table.concat(kijoLogs, "\n"))
-                                button.Text = "KIJO: DEBUG disalin!"
+                                button.Text = "OKAZU: DEBUG disalin!"
                             end
                         end)
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "KIJO v1.0.62: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "OKAZU v1.0.63: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[KIJO v1.0.62] " .. kijoLastStatus
+                    local line = "[OKAZU v1.0.63] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "KIJO v1.0.62: " .. kijoLastStatus
+                        kijoDebugButton.Text = "OKAZU v1.0.63: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
-                -- v1.0.62: deduplikasi sink langsung vs LogService.
+                -- v1.0.63: deduplikasi sink langsung vs LogService.
                 local seenLog = {}
                 local bridgeEnv = (typeof(getgenv) == "function" and getgenv()) or _G
                 bridgeEnv.__VL_DEBUG_SINK = function(message)
@@ -244,7 +244,7 @@ do
                     if #kijoLogs > 350 then table.remove(kijoLogs, 1) end
                     kijoLastStatus = line
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "v1.0.62: " .. line:sub(1, 170)
+                        kijoDebugButton.Text = "v1.0.63: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -254,6 +254,7 @@ do
                         or message:find("[MAMORI TRACE]", 1, true)
                         or message:find("[FINAL]", 1, true)
                         or message:find("[STYLE]", 1, true)
+                        or message:find("[PITY FASE 1]", 1, true)
                         or message:find("[MAMORI WATCH]", 1, true)
                         or message:find("[LEVEL BOOT]", 1, true)
                         or message:find("[LEVEL TUTORIAL]", 1, true)
@@ -263,7 +264,7 @@ do
                     end
                 end)
                 attachKijoDebug()
-                kijoStatus("Add-on dimulai; debug aktif sebelum cek Mamori")
+                kijoStatus("Add-on dimulai; debug aktif sebelum cek Kijo")
                 task.spawn(function()
                     while playerA.Parent do
                         task.wait(2)
@@ -272,11 +273,11 @@ do
                         end
                     end
                 end)
-                local POPUP_NAME = "MamoriCompactPopupV110"
+                local POPUP_NAME = "KijoCompactPopupV110"
                 local STAGE_FILE = "VL_Final_Stage_" .. tostring(playerA.UserId) .. ".txt"
                 local STAGE_KEY = "VL_Final_Stage_" .. tostring(playerA.UserId)
-                local SAVE_FILE = "VL_Mamori_Ability_Origin_" .. tostring(playerA.UserId) .. ".txt"
-                local SAVE_KEY = "VL_Mamori_Ability_Origin_" .. tostring(playerA.UserId)
+                local SAVE_FILE = "VL_Kijo_Ability_Origin_" .. tostring(playerA.UserId) .. ".txt"
+                local SAVE_KEY = "VL_Kijo_Ability_Origin_" .. tostring(playerA.UserId)
                 local displayed = false
                 local historyGui = playerGuiA:FindFirstChild("CombinedSpinHistoryV124")
                 if historyGui then historyGui:Destroy() end
@@ -376,8 +377,8 @@ do
                     return knitA
                 end
 
-                local OWNED_FILE = "VL_Mamori_Owned_" .. tostring(playerA.UserId) .. ".flag"
-                local OWNED_KEY = "__VL_MAMORI_OWNED_" .. tostring(playerA.UserId)
+                local OWNED_FILE = "VL_Kijo_Owned_" .. tostring(playerA.UserId) .. ".flag"
+                local OWNED_KEY = "__VL_KIJO_OWNED_" .. tostring(playerA.UserId)
                 local function hasOwnedCache()
                     if env[OWNED_KEY] == true then return true end
                     if typeof(readfile) ~= "function" then return false end
@@ -385,7 +386,7 @@ do
                         if typeof(isfile) == "function" and not isfile(OWNED_FILE) then return nil end
                         return readfile(OWNED_FILE)
                     end)
-                    if ok and v == "MAMORI_OWNED" then
+                    if ok and v == "KIJO_OWNED" then
                         env[OWNED_KEY] = true
                         return true
                     end
@@ -394,11 +395,11 @@ do
                 local function markOwnedCache()
                     env[OWNED_KEY] = true
                     if typeof(writefile) == "function" then
-                        pcall(function() writefile(OWNED_FILE, "MAMORI_OWNED") end)
+                        pcall(function() writefile(OWNED_FILE, "KIJO_OWNED") end)
                     end
                 end
 
-                local function hasMamori()
+                local function hasKijoFirst()
                     if hasOwnedCache() then return true end
                     local ok, found = pcall(function()
                         if not styleModA then
@@ -416,7 +417,7 @@ do
                         for _, id in pairs(slots) do
                             local valid, def = pcall(function() return styleModA:Get(id) end)
                             if valid and def and type(def.DisplayName) == "string"
-                                and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "mamori" then
+                                and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "kijo" then
                                 markOwnedCache()
                                 return true
                             end
@@ -439,7 +440,7 @@ do
                     local ok, def = pcall(function() return styleModA:Get(id) end)
                     if ok and def then
                         local label = def.DisplayName or tostring(id)
-                        return label, tostring(label):lower():match("^%s*(.-)%s*$") == "mamori"
+                        return label, tostring(label):lower():match("^%s*(.-)%s*$") == "kijo"
                     end
                     return tostring(id), false
                 end
@@ -451,10 +452,10 @@ do
                         if id and id:lower() ~= "nil" then
                             lastStyleMessageAt = os.clock()
                             local label, target = styleName(id)
-                            publishHistory("STYLE", label, target)
+                            publishHistory("STYLE", label, target or tostring(label):lower() == "timeskip okazu")
                         end
-                    elseif message:find("[AutoSpin] Mamori SUDAH DIDAPATKAN", 1, true) then
-                        publishHistory("STYLE", "Mamori", true)
+                    elseif message:find("[AutoSpin] Kijo SUDAH DIDAPATKAN", 1, true) then
+                        publishHistory("STYLE", "Kijo", true)
                     end
                 end)
                 task.spawn(function()
@@ -487,7 +488,7 @@ do
                                     end)
                                     if ok and id then
                                         local label, target = styleName(id)
-                                        publishHistory("STYLE", label, target)
+                                        publishHistory("STYLE", label, target or tostring(label):lower() == "timeskip okazu")
                                     end
                                 end)
                             end
@@ -562,12 +563,11 @@ do
                     return nil
                 end
                 local inventoryRareStyleSummary
-                -- v1.0.52: notifikasi final bersama untuk Mamori/Kijo dan
-                -- kondisi semua slot Mamori/Kijo terlindungi.
+                -- v1.0.63: webhook akhir untuk Kijo (fase 1) dan Timeskip Okazu (fase 2).
                 local function notifyFinal(hasKijo, reason)
                     reason = reason or "FINAL"
                     if webhookBusy then return end
-                    if reason ~= "NO_SLOT_MAMORI" and hasMamori() ~= true then return end
+                    if reason ~= "NO_SLOT_FIRST_KIJO" and hasKijoFirst() ~= true then return end
                     if type(WEBHOOK_URL) ~= "string" or WEBHOOK_URL == "" then return end
                     if not WEBHOOK_URL:match("^https://") then return end
                     if typeof(isfile) ~= "function" or typeof(writefile) ~= "function"
@@ -579,7 +579,7 @@ do
                         return
                     end
                     -- Versi baru: notifikasi lengkap tidak tertahan flag versi lama.
-                    local file = "VL_Mamori_Kijo_Final_Once_V152_"
+                    local file = "VL_Kijo_TimeskipOkazu_Final_Once_v163_"
                         .. tostring(playerA.UserId) .. ".flag"
                     local okRead, existing = pcall(function()
                         if isfile(file) then return readfile(file) end
@@ -600,18 +600,18 @@ do
                     local marked = pcall(writefile, file, "pending|" .. tostring(os.time()))
                     if not marked then webhookBusy = false; return end
                     task.spawn(function()
-                        local statusLabel = reason == "LOW_LUCKY_KIJO"
-                            and "STOP: Lucky awal Kijo <=3; tidak melakukan spin Kijo"
-                            or (reason == "NO_SLOT_MAMORI"
-                                and "STOP: tidak ada slot aman untuk mencari Mamori"
-                                or (reason == "NO_SLOT_KIJO"
-                                and "STOP: Mamori dimiliki, tidak ada slot aman untuk Kijo"
-                                or (hasKijo and "SELESAI: Mamori + Kijo"
-                                    or "SELESAI: Mamori")))
-                        local owned = reason ~= "NO_SLOT_MAMORI"
-                            and hasMamori() == true
-                        local styleResult = hasKijo and "Mamori + Kijo"
-                            or (owned and "Mamori" or "Mamori belum didapat")
+                        local statusLabel = reason == "LOW_LUCKY_TIMESKIP_OKAZU"
+                            and "STOP: Lucky awal Timeskip Okazu <=3; tidak melakukan spin Timeskip Okazu"
+                            or (reason == "NO_SLOT_FIRST_KIJO"
+                                and "STOP: tidak ada slot aman untuk mencari Kijo"
+                                or (reason == "NO_SLOT_TIMESKIP_OKAZU"
+                                and "STOP: Kijo dimiliki, tidak ada slot aman untuk Timeskip Okazu"
+                                or (hasKijo and "SELESAI: Kijo + Timeskip Okazu"
+                                    or "SELESAI: Kijo")))
+                        local owned = reason ~= "NO_SLOT_FIRST_KIJO"
+                            and hasKijoFirst() == true
+                        local styleResult = hasKijo and "Kijo + Timeskip Okazu"
+                            or (owned and "Kijo" or "Kijo belum didapat")
                         local secret = knownSecretName()
                         local content = "@everyone\n✅ Hasil akhir pencarian Style!\n"
                             .. "Akun: " .. tostring(playerA.Name)
@@ -649,13 +649,13 @@ do
                         webhookBusy = false
                     end)
                 end
-                -- Dapat dipanggil oleh fase Mamori tanpa menggandakan webhook.
-                local noSlotMamoriKey = "__VL_MAMORI_NO_SLOT_" .. tostring(playerA.UserId)
+                -- Dapat dipanggil oleh fase Kijo pertama tanpa menggandakan webhook.
+                local noSlotFirstKijoKey = "__VL_FIRST_KIJO_NO_SLOT_" .. tostring(playerA.UserId)
                 env["__VL_FINAL_NOTIFY_" .. tostring(playerA.UserId)] = notifyFinal
 
                 local function showPopup()
-                    if hasMamori() ~= true or hasSecretAbility() ~= true then return end
-                    publishHistory("STYLE", "Mamori", true)
+                    if hasKijoFirst() ~= true or hasSecretAbility() ~= true then return end
+                    publishHistory("STYLE", "Kijo", true)
                     local ownedSlots = readSignal(abilityA.Abilities)
                     if type(ownedSlots) == "table" then
                         for _, abilityId in pairs(ownedSlots) do
@@ -795,7 +795,7 @@ do
                 local rollbackInvoked = false
                 local function rollbackAbilityOnce()
                     if rollbackInvoked then return end
-                    if hasMamori() ~= true then return end
+                    if hasKijoFirst() ~= true then return end
                     local owned = hasSecretAbility()
                     if owned == true then showPopup(); return end
                     if owned == nil then
@@ -811,7 +811,7 @@ do
                             return
                         end
                     end
-                    if hasMamori() ~= true then return end
+                    if hasKijoFirst() ~= true then return end
                     owned = hasSecretAbility()
                     if owned == true then showPopup(); return end
                     if owned ~= false then return end
@@ -849,7 +849,7 @@ do
                 TPA.TeleportInitFailed:Connect(function(p, result, message)
                     if p == playerA then
                         saveRejoinInProgress = false
-                        warn("[ABILITY ADD-ON] Rejoin penyimpanan Mamori ditolak: "
+                        warn("[ABILITY ADD-ON] Rejoin penyimpanan Kijo ditolak: "
                             .. tostring(result) .. " / " .. tostring(message))
                     end
                 end)
@@ -863,7 +863,7 @@ do
                         TPA:Teleport(game.PlaceId, playerA)
                     end)
                     if not ok then
-                        warn("[ABILITY ADD-ON] Rejoin penyimpanan Mamori gagal: " .. tostring(err))
+                        warn("[ABILITY ADD-ON] Rejoin penyimpanan Kijo gagal: " .. tostring(err))
                     end
                 end
 
@@ -891,11 +891,11 @@ do
                     end
                     return nil
                 end
-                local function hasKijoStyle()
+                local function hasTimeskipOkazu()
                     local slots = readSignal(teamA.Styles)
                     if type(slots) ~= "table" then return nil end
                     for _, id in pairs(slots) do
-                        if getStyleName(id) == "kijo" then return true end
+                        if getStyleName(id) == "timeskip okazu" or id == "TimeskipToru4" then return true end
                     end
                     return false
                 end
@@ -922,10 +922,10 @@ do
                 -- Lucky yang digunakan membersihkan duplikat juga dihitung.
                 local MAX_KIJO_LUCKY_SPENT = 30
                 local kijoBudget = makePersistentLuckyBudget(
-                    playerA.UserId, "KIJO", MAX_KIJO_LUCKY_SPENT)
+                    playerA.UserId, "TIMESKIP_OKAZU", MAX_KIJO_LUCKY_SPENT)
                 local kijoLuckyPendingBefore = nil
                 local clearKijoInitialDecision -- ditetapkan di blok komitmen Kijo
-                kijoStatus("Budget Lucky Kijo: " .. tostring(kijoBudget.spent())
+                kijoStatus("Budget Lucky Timeskip Okazu: " .. tostring(kijoBudget.spent())
                     .. "/30 (tersimpan lintas rejoin); rollback pending="
                     .. tostring(kijoBudget.isRollbackPending()))
                 local function observeKijoLucky(balance)
@@ -937,10 +937,10 @@ do
                         if type(clearKijoInitialDecision) == "function" then
                             clearKijoInitialDecision()
                         end
-                        kijoStatus("Rollback Kijo terdeteksi: saldo Lucky pulih;"
+                        kijoStatus("Rollback Timeskip Okazu terdeteksi: saldo Lucky pulih;"
                             .. " budget baru 0/30")
                     elseif used > before then
-                        kijoStatus("Lucky Kijo terpakai " .. tostring(used)
+                        kijoStatus("Lucky Timeskip Okazu terpakai " .. tostring(used)
                             .. "/30 | Sisa saldo " .. tostring(balance))
                     end
                     if kijoLuckyPendingBefore and type(balance) == "number"
@@ -954,24 +954,24 @@ do
                 end
 
                 local lastDuplicateAttempt = -100
-                local function findDuplicateMamori()
+                local function findDuplicateKijo()
                     local slots = readSignal(teamA and teamA.Styles)
                     if type(slots) ~= "table" then return nil end
                     local matches = {}
                     for key, id in pairs(slots) do
                         local n = tonumber(key)
                         if n and n >= 1 and n % 1 == 0
-                            and getStyleName(id) == "mamori" then
+                            and (getStyleName(id) == "kijo" or id == "Kijo3") then
                             matches[#matches + 1] = n
                         end
                     end
                     table.sort(matches)
                     return matches
                 end
-                local function clearDuplicateMamori(ctrl, rollRF, selectRF)
-                    local found = findDuplicateMamori()
+                local function clearDuplicateKijo(ctrl, rollRF, selectRF)
+                    local found = findDuplicateKijo()
                     if not found then
-                        return false, "Data slot Mamori belum siap"
+                        return false, "Data slot Kijo belum siap"
                     end
                     if #found <= 1 then return true end
                     -- v1.0.47: Roll RF wajib ada untuk membersihkan duplikat.
@@ -993,7 +993,7 @@ do
                     for _, slot in ipairs(found) do
                         if slot ~= extra then keep = slot; break end
                     end
-                    if not keep then return false, "Tidak bisa menentukan Mamori yang dipertahankan" end
+                    if not keep then return false, "Tidak bisa menentukan Kijo yang dipertahankan" end
                     local lucky = readSignal(ctrl and ctrl.LuckySpins)
                     local normal = readSignal(ctrl and ctrl.Spins)
                     observeKijoLucky(lucky)
@@ -1001,7 +1001,7 @@ do
                         return false, "Jumlah spin belum tersinkron"
                     end
                     if lucky <= 0 and normal <= 0 then
-                        kijoStatus("Mamori ganda di slot " .. tostring(found[1])
+                        kijoStatus("Kijo ganda di slot " .. tostring(found[1])
                             .. " & " .. tostring(extra) .. "; spin habis, tidak bisa bersihkan")
                         return "NO_SPINS"
                     end
@@ -1012,13 +1012,13 @@ do
                     if useLucky and kijoLuckyPendingBefore then
                         return false, "LUCKY_PENDING"
                     end
-                    kijoStatus("Mamori duplikat: pertahankan slot " .. tostring(keep)
+                    kijoStatus("Kijo duplikat: pertahankan slot " .. tostring(keep)
                         .. ", spin ULANG slot " .. tostring(extra)
                         .. (useLucky and " (Lucky)" or " (Normal)"))
                     if tonumber(readSignal(teamA.CurrentStyleSlot)) ~= extra then
                         local ok, result = pcall(selectRF.InvokeServer, selectRF, extra)
                         if not ok or result == false then
-                            kijoStatus("Gagal memilih Mamori duplikat: " .. tostring(result))
+                            kijoStatus("Gagal memilih Kijo duplikat: " .. tostring(result))
                             return false, "SelectSlot gagal"
                         end
                         local swapped = false
@@ -1031,7 +1031,7 @@ do
                         end
                         if not swapped then return false, "SelectSlot belum tersinkron" end
                     end
-                    local before = findDuplicateMamori()
+                    local before = findDuplicateKijo()
                     local stillKeep, stillExtra = false, false
                     for _, slot in ipairs(before or {}) do
                         if slot == keep then stillKeep = true end
@@ -1052,7 +1052,7 @@ do
                     local changed = false
                     for _ = 1, 40 do
                         task.wait(0.15)
-                        local after = findDuplicateMamori()
+                        local after = findDuplicateKijo()
                         if after and #after < #before then
                             changed = true
                             break
@@ -1069,16 +1069,16 @@ do
                         return false, "Hasil roll duplikat belum sinkron"
                     end
                     if useLucky then observeKijoLucky(readSignal(ctrl.LuckySpins)) end
-                    local after = findDuplicateMamori()
-                    kijoStatus("Spin Mamori duplikat selesai; sisa Mamori="
+                    local after = findDuplicateKijo()
+                    kijoStatus("Spin Kijo duplikat selesai; sisa Kijo="
                         .. tostring(after and #after or "belum sinkron"))
                     return true
                 end
                 local function clearAllDuplicates(ctrl, rollRF, selectRF)
                     for _ = 1, 12 do
-                        local matches = findDuplicateMamori()
+                        local matches = findDuplicateKijo()
                         if matches and #matches <= 1 then return true end
-                        local ok, why = clearDuplicateMamori(ctrl, rollRF, selectRF)
+                        local ok, why = clearDuplicateKijo(ctrl, rollRF, selectRF)
                         if ok ~= true then return ok, why end
                         task.wait(0.3)
                     end
@@ -1094,14 +1094,14 @@ do
                     return tostring(s or ""):lower():match("^%s*(.-)%s*$")
                 end
                 local knownProtected = {
-                    mamori=true, kijo=true, sanju=true, kisuki=true,
+                    mamori=true, kijo=true, ["timeskip okazu"]=true, timeskiptoru4=true, sanju=true, kisuki=true,
                     kazana=true, hidari=true, yogan=true, feiko=true,
                     ibara=true, kumo=true, mikage=true, taichou=true,
                     hakka=true, akari=true, ronin=true, encho=true,
                     rintaro=true, kimiro=true
                 }
                 local referenceStyles = {
-                    Secret={"Mamori", "Sanju", "Kisuki", "Kazana", "Hidari", "Yogan", "Feiko", "Ibara", "Kumo", "Kijo", "Mikage", "Taichou"},
+                    Secret={"Mamori", "Sanju", "Kisuki", "Kazana", "Hidari", "Yogan", "Feiko", "Ibara", "Kumo", "Kijo", "Timeskip Okazu", "Mikage", "Taichou"},
                     Ultra={"Hakka", "Akari", "Ronin"},
                     Evo={"Encho"}
                 }
@@ -1152,7 +1152,7 @@ do
                         and counts.Ultra > 0 and counts.Evo > 0
                 end
                 -- v1.0.52: semua style Secret/Ultra/Evo dari SELURUH slot,
-                -- bukan hanya slot aktif atau target Mamori/Kijo.
+                -- bukan hanya slot aktif atau dua target.
                 inventoryRareStyleSummary = function()
                     if not teamA or not teamA.Styles or not styleModA then
                         -- Baca langsung tanpa bergantung pada worker spin.
@@ -1178,7 +1178,7 @@ do
                     local known = {
                         Secret={mamori=true,sanju=true,kisuki=true,kazana=true,
                             hidari=true,yogan=true,feiko=true,ibara=true,
-                            kumo=true,kijo=true,mikage=true,taichou=true},
+                            kumo=true,kijo=true,["timeskip okazu"]=true,timeskiptoru4=true,mikage=true,taichou=true},
                         Ultra={hakka=true,akari=true,ronin=true},
                         Evo={encho=true}
                     }
@@ -1262,9 +1262,11 @@ do
                         or knownProtected[base] == true
                         or base:find("mamori", 1, true) ~= nil
                         or base:find("kijo", 1, true) ~= nil
+                        or base:find("timeskiptoru4", 1, true) ~= nil
+                        or name == "timeskip okazu"
                 end
 
-                -- v1.0.47: urutan seperti fase Mamori.
+                -- Urutan slot prioritas seperti fase pertama.
                 -- Common (1) > rarity string/angka aman (2-5) > Rintaro/Kimiro (6, terakhir).
                 local commonNames = {hinto=true, hakochi=true, sagumi=true,
                     tonkura=true, kishoti=true, yachikusai=true}
@@ -1276,9 +1278,10 @@ do
                     local def = styleDef(id)
                     local dn = def and lower(def.DisplayName) or ""
                     local base = lower(id)
-                    -- Target Mamori/Kijo mutlak dilindungi.
+                    -- Target Kijo/Timeskip Okazu dan Mamori mutlak dilindungi.
                     if base:find("mamori", 1, true) or base:find("kijo", 1, true)
-                        or dn == "mamori" or dn == "kijo" then
+                        or dn == "mamori" or dn == "kijo" or dn == "timeskip okazu"
+                        or base:find("timeskiptoru4", 1, true) then
                         return nil, "target dilindungi"
                     end
                     -- Dicek SEBELUM knownProtected (keduanya ada di sana).
@@ -1383,7 +1386,7 @@ do
                             return false, "slot khusus belum tersinkron"
                         end
                         if not initialSlotRank(id) then
-                            print("[KIJO] Slot " .. tostring(picked) .. " kini dilindungi: " .. tostring(id))
+                            print("[OKAZU] Slot " .. tostring(picked) .. " kini dilindungi: " .. tostring(id))
                             picked, kijoDedicatedSlot = nil, nil
                         end
                     end
@@ -1422,14 +1425,14 @@ do
                     return true
                 end
 
-                local PITY_FILE = "VL_Kijo_Pity_Save_" .. tostring(playerA.UserId) .. ".txt"
-                local PITY_TP_KEY = "VL_Kijo_Pity_Save_" .. tostring(playerA.UserId)
-                local function preferredKijo()
+                local PITY_FILE = "VL_TimeskipOkazu_Pity_Save_v163_" .. tostring(playerA.UserId) .. ".txt"
+                local PITY_TP_KEY = "VL_TimeskipOkazu_Pity_Save_v163_" .. tostring(playerA.UserId)
+                local function preferredTimeskipOkazu()
                     local knit = getKnit()
                     if not knit then return nil end
                     local ok, ctrl = pcall(function() return knit.GetController("StyleController") end)
                     if not ok or not ctrl or not ctrl.PreferredSecret then return nil end
-                    return readSignal(ctrl.PreferredSecret) == "Kijo3"
+                    return readSignal(ctrl.PreferredSecret) == "TimeskipToru4"
                 end
                 local function pityPending()
                     local value
@@ -1464,8 +1467,8 @@ do
                     end
                     pcall(function() TPA:SetTeleportSetting(PITY_TP_KEY, "") end)
                 end
-                local function selectKijoCallback()
-                    if preferredKijo() == true then return true end
+                local function selectTimeskipOkazuCallback()
+                    if preferredTimeskipOkazu() == true then return true end
                     local function findKijoButton()
                         local gui = playerA:FindFirstChild("PlayerGui")
                         local styles = gui and gui:FindFirstChild("Interface")
@@ -1475,7 +1478,7 @@ do
                         local bg = pity and pity:FindFirstChild("BGFrame")
                         local body = bg and bg:FindFirstChild("Body")
                         local list = body and body:FindFirstChild("List")
-                        return list and list:FindFirstChild("Kijo3")
+                        return list and list:FindFirstChild("TimeskipToru4")
                     end
                     -- v1.0.47: buka menu Styles dulu agar tombol Pity terbentuk.
                     pcall(function()
@@ -1491,12 +1494,12 @@ do
                         end
                     end
                     if not btn or not btn:IsA("GuiButton") then
-                        warn("[KIJO] Tombol internal Kijo3 belum tersedia.")
+                        warn("[OKAZU] Tombol internal TimeskipToru4 belum tersedia.")
                         return false
                     end
                     local ups = (debug and debug.getupvalues) or getupvalues
                     if type(ups) ~= "function" or type(getconnections) ~= "function" then
-                        warn("[KIJO] getconnections/getupvalues tidak tersedia.")
+                        warn("[OKAZU] getconnections/getupvalues tidak tersedia.")
                         return false
                     end
                     local ok, connections = pcall(getconnections, btn.Activated)
@@ -1508,22 +1511,23 @@ do
                                 for _, obj in pairs(vals) do
                                     if type(obj) == "table" and type(obj.OnActivated) == "function" then
                                         local fired, err = pcall(obj.OnActivated)
-                                        if not fired then warn("[KIJO] Callback gagal: " .. tostring(err)) end
+                                        if not fired then fired, err = pcall(obj.OnActivated, obj) end
+                                        if not fired then warn("[OKAZU] Callback gagal: " .. tostring(err)) end
                                         for _ = 1, 25 do
-                                            if preferredKijo() == true then
-                                                print("[KIJO] Secret Pity Kijo3 dikonfirmasi.")
+                                            if preferredTimeskipOkazu() == true then
+                                                print("[OKAZU] Secret Pity TimeskipToru4 dikonfirmasi.")
                                                 return true
                                             end
                                             task.wait(0.2)
                                         end
-                                        warn("[KIJO] Callback dipanggil, tetapi Kijo3 belum terkonfirmasi.")
+                                        warn("[OKAZU] Callback dipanggil, tetapi TimeskipToru4 belum terkonfirmasi.")
                                         return false
                                     end
                                 end
                             end
                         end
                     end
-                    warn("[KIJO] Callback asli Kijo belum ditemukan.")
+                    warn("[OKAZU] Callback asli Timeskip Okazu belum ditemukan.")
                     return false
                 end
                 -- v1.0.50: bedakan Pity yang baru dipilih dalam sesi ini
@@ -1531,16 +1535,16 @@ do
                 -- JobId yang sama tidak berarti rejoin gagal.
                 local pitySelectedThisSession = false
                 local lastPityTp = 0
-                local function rejoinForKijoPity()
+                local function rejoinForTimeskipOkazuPity()
                     if os.clock() - lastPityTp < 15 then return end
                     lastPityTp = os.clock()
-                    print("[KIJO] Pity Kijo terpilih. REJOIN dahulu untuk menyimpan sebelum spin.")
+                    print("[OKAZU] Pity Timeskip Okazu terpilih. REJOIN dahulu untuk menyimpan sebelum spin.")
                     local ok, err = pcall(function() TPA:Teleport(game.PlaceId, playerA) end)
-                    if not ok then warn("[KIJO] Rejoin Pity ditolak: " .. tostring(err)) end
+                    if not ok then warn("[OKAZU] Rejoin Pity ditolak: " .. tostring(err)) end
                 end
-                local function readyAfterKijoPityRejoin()
+                local function readyAfterTimeskipOkazuPityRejoin()
                     local pending = pityPending()
-                    local chosen = preferredKijo()
+                    local chosen = preferredTimeskipOkazu()
                     if chosen == nil then
                         kijoStatus("Menunggu data PreferredSecret dari game")
                         return false
@@ -1549,35 +1553,35 @@ do
                         if chosen == true then
                             if pitySelectedThisSession then
                                 -- Pilihan dibuat pada sesi ini: rejoin sekali untuk simpan.
-                                kijoStatus("Pity Kijo3 baru dipilih: menunggu rejoin penyimpanan")
-                                rejoinForKijoPity()
+                                kijoStatus("Pity TimeskipToru4 baru dipilih: menunggu rejoin penyimpanan")
+                                rejoinForTimeskipOkazuPity()
                                 return false
                             end
                             -- Penanda berasal dari sesi sebelumnya. Tetap sah
                             -- meskipun rejoin masuk kembali ke JobId yang sama.
                             clearPityPending()
-                            kijoStatus("Pity Kijo3 terkonfirmasi setelah rejoin; lanjut spin")
+                            kijoStatus("Pity TimeskipToru4 terkonfirmasi setelah rejoin; lanjut spin")
                             return true
                         end
                         -- Pilihan belum tersimpan/berubah: jangan teleport loop.
                         clearPityPending()
-                        kijoStatus("Pity Kijo3 belum terkonfirmasi; pilih ulang")
+                        kijoStatus("Pity TimeskipToru4 belum terkonfirmasi; pilih ulang")
                     end
                     if chosen == true then
                         return true
                     end
-                    if not selectKijoCallback() then
-                        kijoStatus("Tombol/callback Secret Pity Kijo3 belum siap; ulang otomatis")
+                    if not selectTimeskipOkazuCallback() then
+                        kijoStatus("Tombol/callback Secret Pity TimeskipToru4 belum siap; ulang otomatis")
                         return false
                     end
                     if not writePityPending() then
-                        kijoStatus("Gagal menyimpan penanda rejoin Kijo: spin ditunda")
-                        warn("[KIJO] Gagal menulis penanda lokal; spin dibatalkan.")
+                        kijoStatus("Gagal menyimpan penanda rejoin Timeskip Okazu: spin ditunda")
+                        warn("[OKAZU] Gagal menulis penanda lokal; spin dibatalkan.")
                         return false
                     end
                     pitySelectedThisSession = true
-                    kijoStatus("Pity Kijo3 dipilih: rejoin penyimpanan")
-                    rejoinForKijoPity()
+                    kijoStatus("Pity TimeskipToru4 dipilih: rejoin penyimpanan")
+                    rejoinForTimeskipOkazuPity()
                     return false
                 end
 
@@ -1615,7 +1619,7 @@ do
                     TPA.TeleportInitFailed:Connect(function(p, result, message)
                         if p == playerA and kijoRollbackInFlight then
                             kijoStatus("Teleport rollback ditolak: " .. tostring(result))
-                            warn("[KIJO ROLLBACK] " .. tostring(result) .. " / " .. tostring(message))
+                            warn("[OKAZU ROLLBACK] " .. tostring(result) .. " / " .. tostring(message))
                             kijoRollbackInFlight = false
                         end
                     end)
@@ -1623,15 +1627,15 @@ do
                 local function rollbackKijoOnce()
                     if kijoRollbackInFlight then return false end
                     if os.clock() - lastKijoRollbackAttempt < 15 then return false end
-                    local owned = hasKijoStyle()
+                    local owned = hasTimeskipOkazu()
                     if owned ~= false then return false end
                     for _ = 1, 5 do
                         task.wait(0.3)
-                        owned = hasKijoStyle()
+                        owned = hasTimeskipOkazu()
                         if owned ~= false then return false end
                     end
-                    if preferredKijo() ~= true then
-                        kijoStatus("Pity belum Kijo3: rollback ditunda")
+                    if preferredTimeskipOkazu() ~= true then
+                        kijoStatus("Pity belum TimeskipToru4: rollback ditunda")
                         return false
                     end
                     local knit = getKnit()
@@ -1651,9 +1655,9 @@ do
                     kijoRollbackInFlight = true
                     kijoStatus((kijoLuckyCapReached()
                         and ("Batas " .. tostring(MAX_KIJO_LUCKY_SPENT)
-                            .. " Lucky Kijo tercapai, saldo=" .. tostring(remaining))
+                            .. " Lucky Timeskip Okazu tercapai, saldo=" .. tostring(remaining))
                         or "Lucky habis (0)")
-                        .. ", Kijo belum ada: ROLLBACK seperti Mamori")
+                        .. ", Timeskip Okazu belum ada: ROLLBACK seperti Kijo")
                     local ok, err = pcall(function()
                         local remote = RSA:WaitForChild("Packages")
                             :WaitForChild("_Index")
@@ -1669,7 +1673,7 @@ do
                     if not ok then
                         kijoRollbackInFlight = false
                         kijoStatus("Rollback gagal: " .. tostring(err))
-                        warn("[KIJO ROLLBACK] " .. tostring(err))
+                        warn("[OKAZU ROLLBACK] " .. tostring(err))
                     end
                     return ok
                 end
@@ -1682,13 +1686,13 @@ do
                         return r1, r2
                     end)
                 end
-                local function resultIsKijo(x)
-                    if type(x) == "string" then return getStyleName(x) == "kijo" end
+                local function resultIsOkazu(x)
+                    if type(x) == "string" then return getStyleName(x) == "timeskip okazu" end
                     if type(x) == "table" then
                         for _, k in ipairs({"Id", "Style", "StyleId"}) do
-                            if resultIsKijo(x[k]) then return true end
+                            if resultIsOkazu(x[k]) then return true end
                         end
-                        for _, e in ipairs(x) do if resultIsKijo(e) then return true end end
+                        for _, e in ipairs(x) do if resultIsOkazu(e) then return true end end
                     end
                     return false
                 end
@@ -1708,33 +1712,33 @@ do
                     return tostring(x)
                 end
                 local function kijoDone()
-                    publishHistory("STYLE", "Kijo", true)
+                    publishHistory("STYLE", "Timeskip Okazu", true)
                     kijoBudget.resetAfterSuccess()
                     finishToZero()
                     notifyFinal(true)
                     kijoFinished = true
                 end
 
-                -- Tidak ada slot aman: selesai dengan Mamori saja, TANPA spin,
+                -- Tidak ada slot aman: selesai dengan Kijo saja, TANPA spin,
                 -- TANPA rejoin Pity, TANPA rollback Kijo.
                 local function stopKijoNoSlot(reason)
                     -- Konfirmasi ulang untuk menghindari false positive saat inventori refresh.
                     task.wait(0.4)
-                    if hasMamori() ~= true or hasKijoStyle() ~= false then return false end
+                    if hasKijoFirst() ~= true or hasTimeskipOkazu() ~= false then return false end
                     local available, detail = kijoSlotAvailability()
                     if available ~= false then return false end
                     kijoFinished = true
                     finishToZero()
-                    kijoStatus("STOP Kijo: tidak ada slot aman. Webhook final Mamori saja. "
+                    kijoStatus("STOP Timeskip Okazu: tidak ada slot aman. Webhook final Kijo saja. "
                         .. tostring(detail or reason))
-                    notifyFinal(false, "NO_SLOT_KIJO")
+                    notifyFinal(false, "NO_SLOT_TIMESKIP_OKAZU")
                     return true
                 end
 
                 -- Prioritaskan aturan NO SLOT (webhook) dibanding rollback
                 -- apabila roll terakhir membuat semua slot terlindungi.
                 local function kijoRollbackOrNoSlot(reason)
-                    if hasKijoStyle() == true then
+                    if hasTimeskipOkazu() == true then
                         kijoDone()
                         return
                     end
@@ -1747,7 +1751,7 @@ do
                 local function runKijoSpin()
                     if kijoStarted or kijoRollbackInFlight then return end
                     kijoStarted = true
-                    kijoStatus("Memulai Kijo worker")
+                    kijoStatus("Memulai Timeskip Okazu worker")
                     local ctrl, rollRF, selectRF
                     local lastContextStatus = -100
                     while playerA.Parent do
@@ -1772,9 +1776,9 @@ do
                     end
                     if not playerA.Parent then return end
                     observeKijoLucky(readSignal(ctrl and ctrl.LuckySpins))
-                    local kijoBefore = hasKijoStyle()
+                    local kijoBefore = hasTimeskipOkazu()
                     if kijoBefore == nil then
-                        kijoStatus("Inventory Kijo belum siap; tunggu sinkronisasi")
+                        kijoStatus("Inventory Timeskip Okazu belum siap; tunggu sinkronisasi")
                         return
                     end
                     -- Cek sebelum komit Lucky, pemilihan Pity, rejoin, atau rollback.
@@ -1785,7 +1789,7 @@ do
                             kijoStatus("Status slot berubah saat konfirmasi; periksa ulang")
                             return
                         elseif available == nil then
-                            kijoStatus("Menunggu kepastian slot Kijo: " .. tostring(detail))
+                            kijoStatus("Menunggu kepastian slot Timeskip Okazu: " .. tostring(detail))
                             return
                         end
                     end
@@ -1796,7 +1800,7 @@ do
                     local luckyAtStart = readSignal(ctrl.LuckySpins)
                     if kijoBefore == false then
                         if type(luckyAtStart) ~= "number" then
-                            kijoStatus("Lucky awal Kijo belum terbaca; jangan spin dulu")
+                            kijoStatus("Lucky awal Timeskip Okazu belum terbaca; jangan spin dulu")
                             return
                         end
                         if not toZeroWasCommitted() then
@@ -1804,7 +1808,7 @@ do
                                 finishToZero()
                                 kijoStatus("Lucky AWAL GAME INI " .. tostring(luckyAtStart)
                                     .. " (<=3): STOP tanpa spin, kirim webhook")
-                                notifyFinal(false, "LOW_LUCKY_KIJO")
+                                notifyFinal(false, "LOW_LUCKY_TIMESKIP_OKAZU")
                                 kijoFinished = true
                                 return
                             end
@@ -1820,23 +1824,23 @@ do
                         end
                     end
                     if kijoBefore == false and toZeroWasCommitted()
-                        and not readyAfterKijoPityRejoin() then
-                        kijoStatus("Menunggu pemilihan Secret Pity Kijo / rejoin")
+                        and not readyAfterTimeskipOkazuPityRejoin() then
+                        kijoStatus("Menunggu pemilihan Secret Pity Timeskip Okazu / rejoin")
                         return
                     end
                     local dupOK, dupWhy = clearAllDuplicates(ctrl, rollRF, selectRF)
                     observeKijoLucky(readSignal(ctrl.LuckySpins))
                     if dupOK == false then
                         if dupWhy == "LUCKY_CAP" or kijoLuckyCapReached() then
-                            kijoRollbackOrNoSlot("Batas 30 Lucky Kijo saat pembersihan duplikat")
+                            kijoRollbackOrNoSlot("Batas 30 Lucky Timeskip Okazu saat pembersihan duplikat")
                             return
                         end
-                        kijoStatus("Duplikat Mamori belum tuntas: " .. tostring(dupWhy))
+                        kijoStatus("Duplikat Kijo belum tuntas: " .. tostring(dupWhy))
                         return
                     end
-                    if hasKijoStyle() == true then
-                        kijoStatus("Kijo sudah dimiliki: STOP")
-                        print("[KIJO] Kijo sudah dimiliki; tidak perlu spin.")
+                    if hasTimeskipOkazu() == true then
+                        kijoStatus("Timeskip Okazu sudah dimiliki: STOP")
+                        print("[OKAZU] Timeskip Okazu sudah dimiliki; tidak perlu spin.")
                         kijoDone()
                         return
                     end
@@ -1844,25 +1848,25 @@ do
                     observeKijoLucky(lucky)
                     if type(lucky) ~= "number" then
                         kijoStatus("Lucky Style Spins belum dimuat")
-                        warn("[KIJO] Lucky Style Spins belum dapat dibaca; tidak melakukan spin.")
+                        warn("[OKAZU] Lucky Style Spins belum dapat dibaca; tidak melakukan spin.")
                         return
                     end
                     -- Tidak ada pemeriksaan ulang ambang 4 di sini.
                     -- Komit GO sudah dibuat sebelum pembersihan duplikat.
-                    if not readyAfterKijoPityRejoin() then
-                        kijoStatus("Menunggu Kijo Pity / rejoin penyimpanan")
+                    if not readyAfterTimeskipOkazuPityRejoin() then
+                        kijoStatus("Menunggu Timeskip Okazu Pity / rejoin penyimpanan")
                         kijoStarted = false
                         return
                     end
                     if lucky <= 0 or kijoLuckyCapReached() then
                         kijoStatus(kijoLuckyCapReached()
-                            and "Batas 30 Lucky Kijo tercapai: ROLLBACK"
-                            or "Lucky 0, pencarian Kijo AKTIF: ROLLBACK seperti Mamori")
+                            and "Batas 30 Lucky Timeskip Okazu tercapai: ROLLBACK"
+                            or "Lucky 0, pencarian Timeskip Okazu AKTIF: ROLLBACK seperti Kijo")
                         kijoRollbackOrNoSlot()
                         return
                     end
                     if kijoLuckyPendingBefore then
-                        kijoStatus("Menunggu konfirmasi Lucky Kijo sebelumnya; tahan spin baru")
+                        kijoStatus("Menunggu konfirmasi Lucky Timeskip Okazu sebelumnya; tahan spin baru")
                         return
                     end
 
@@ -1888,25 +1892,25 @@ do
                         local currentBudgetLucky = readSignal(ctrl.LuckySpins)
                         observeKijoLucky(currentBudgetLucky)
                         if kijoLuckyCapReached() then
-                            kijoRollbackOrNoSlot("30 Lucky Kijo sudah digunakan")
+                            kijoRollbackOrNoSlot("30 Lucky Timeskip Okazu sudah digunakan")
                             return
                         end
                         if kijoLuckyPendingBefore then
-                            kijoStatus("Menunggu saldo Lucky Kijo terkonfirmasi sebelum spin lain")
+                            kijoStatus("Menunggu saldo Lucky Timeskip Okazu terkonfirmasi sebelum spin lain")
                             return
                         end
                         local dupOK2, dupWhy2 = clearAllDuplicates(ctrl, rollRF, selectRF)
                         if dupOK2 == false then
                             if dupWhy2 == "LUCKY_CAP" or kijoLuckyCapReached() then
-                                kijoRollbackOrNoSlot("Batas Lucky Kijo saat pembersihan duplikat")
+                                kijoRollbackOrNoSlot("Batas Lucky Timeskip Okazu saat pembersihan duplikat")
                                 return
                             end
-                            kijoStatus("Tunda: duplikat Mamori belum tuntas: " .. tostring(dupWhy2))
+                            kijoStatus("Tunda: duplikat Kijo belum tuntas: " .. tostring(dupWhy2))
                             task.wait(1)
                         else
-                            local kijo = hasKijoStyle()
+                            local kijo = hasTimeskipOkazu()
                             if kijo == true then
-                                kijoStatus("Kijo ditemukan! STOP")
+                                kijoStatus("Timeskip Okazu ditemukan! STOP")
                                 kijoDone()
                                 return
                             elseif kijo == nil then
@@ -1919,8 +1923,8 @@ do
                                 elseif currentLucky <= 0 or kijoLuckyCapReached() then
                                     -- Sama seperti Mamori: tunggu 1 detik, cek, baru rollback.
                                     kijoStatus(kijoLuckyCapReached()
-                                        and "30 Lucky Kijo digunakan, cek Kijo sebelum rollback"
-                                        or "Lucky habis, cek Kijo")
+                                        and "30 Lucky Timeskip Okazu digunakan, cek Timeskip Okazu sebelum rollback"
+                                        or "Lucky habis, cek Timeskip Okazu")
                                     task.wait(1)
                                     kijoRollbackOrNoSlot()
                                     return
@@ -1936,15 +1940,15 @@ do
                                         kijoStatus("Slot belum aman (" .. slotFails .. "/10): " .. tostring(why))
                                         if slotFails >= 10 then return end
                                         task.wait(1)
-                                    elseif preferredKijo() ~= true then
-                                        kijoStatus("STOP: Pity bukan Kijo3")
+                                    elseif preferredTimeskipOkazu() ~= true then
+                                        kijoStatus("STOP: Pity bukan TimeskipToru4")
                                         kijoStarted = false
                                         return
                                     else
                                         slotFails = 0
                                         local ok, a, b = doKijoRoll(rollRF)
                                         if not ok then
-                                            warn("[KIJO] Roll ERROR: " .. tostring(a))
+                                            warn("[OKAZU] Roll ERROR: " .. tostring(a))
                                             task.wait(1)
                                         elseif a == false then
                                             task.wait(0.5) -- server menolak, sama seperti Mamori
@@ -1954,34 +1958,34 @@ do
                                             kijoLuckyPendingBefore = currentLucky
                                             kijoStatus("Hasil roll: a=" .. describeResult(a):sub(1, 90)
                                                 .. " | b=" .. describeResult(b):sub(1, 60))
-                                            if resultIsKijo(a) or resultIsKijo(b) then
+                                            if resultIsOkazu(a) or resultIsOkazu(b) then
                                                 -- v1.0.48: balasan remote TIDAK dipercaya sendirian.
                                                 -- Wajib terkonfirmasi di inventori (maks 6 detik).
-                                                kijoStatus("Remote menyebut Kijo; konfirmasi inventori...")
+                                                kijoStatus("Remote menyebut Timeskip Okazu; konfirmasi inventori...")
                                                 local confirmed = false
                                                 for _ = 1, 30 do
-                                                    if hasKijoStyle() == true then confirmed = true; break end
+                                                    if hasTimeskipOkazu() == true then confirmed = true; break end
                                                     task.wait(0.2)
                                                 end
                                                 if confirmed then
-                                                    kijoStatus("Kijo TERKONFIRMASI di inventori! STOP")
+                                                    kijoStatus("Timeskip Okazu TERKONFIRMASI di inventori! STOP")
                                                     kijoDone()
                                                     return
                                                 end
-                                                kijoStatus("Remote menyebut Kijo tapi TIDAK ada di inventori: diabaikan, lanjut")
+                                                kijoStatus("Remote menyebut Timeskip Okazu tapi TIDAK ada di inventori: diabaikan, lanjut")
                                             end
                                             for _ = 1, 25 do
                                                 local afterLucky = readSignal(ctrl.LuckySpins)
                                                 observeKijoLucky(afterLucky)
                                                 if not kijoLuckyPendingBefore then break end
-                                                if hasKijoStyle() == true then
+                                                if hasTimeskipOkazu() == true then
                                                     kijoDone()
                                                     return
                                                 end
                                                 task.wait(0.2)
                                             end
                                             if kijoLuckyPendingBefore then
-                                                kijoStatus("Saldo Lucky belum berubah setelah roll Kijo;"
+                                                kijoStatus("Saldo Lucky belum berubah setelah roll Timeskip Okazu;"
                                                     .. " tahan spin agar batas 30 tidak terlewati")
                                                 return
                                             end
@@ -1998,7 +2002,7 @@ do
                         local ok, err = pcall(runKijoSpin)
                         if not ok then
                             kijoStatus("ERROR worker: " .. tostring(err))
-                            warn("[KIJO] Worker error: " .. tostring(err))
+                            warn("[OKAZU] Worker error: " .. tostring(err))
                         end
                         if not kijoFinished then
                             task.wait(3)
@@ -2011,26 +2015,26 @@ do
                 if game.PlaceId == 86789627188240 then return end
                 task.spawn(function()
                     while playerA.Parent do
-                        if hasMamori() == true and hasSecretAbility() == true then
+                        if hasKijoFirst() == true and hasSecretAbility() == true then
                             showPopup()
                             return
                         end
                         task.wait(1)
                     end
                 end)
-                local initialMamori = nil
+                local initialKijo = nil
                 local secretAbilityMonitorStarted = false
                 local lastGateText, lastGateAt = nil, -100
                 while playerA.Parent do
-                    if env[noSlotMamoriKey] == true then
-                        notifyFinal(false, "NO_SLOT_MAMORI")
+                    if env[noSlotFirstKijoKey] == true then
+                        notifyFinal(false, "NO_SLOT_FIRST_KIJO")
                     end
-                    local mamori = hasMamori()
+                    local mamori = hasKijoFirst()
                     if not kijoLaunched and not kijoFinished then
                         local stage = readStage()
                         local level = playerA:GetAttribute("User_Level")
                         local originNow = readPendingOrigin()
-                        local gate = "Mamori=" .. tostring(mamori)
+                        local gate = "Kijo=" .. tostring(mamori)
                             .. " | Level=" .. tostring(level)
                             .. " | StageROLL=" .. tostring(stage)
                             .. " | SavePending=" .. tostring(originNow ~= nil)
@@ -2040,27 +2044,27 @@ do
                         end
                     end
                     if mamori ~= nil then
-                        if initialMamori == nil then initialMamori = mamori end
+                        if initialKijo == nil then initialKijo = mamori end
                         if mamori then
-                            publishHistory("STYLE", "Mamori", true)
+                            publishHistory("STYLE", "Kijo", true)
                             local origin = readPendingOrigin()
                             local mayProceed = false
                             if origin then
                                 if origin ~= tostring(game.JobId) then
                                     clearPendingOrigin()
                                     mayProceed = true
-                                    kijoStatus("Mamori tersimpan setelah rejoin; lanjut Kijo")
-                                elseif initialMamori == true then
+                                    kijoStatus("Kijo tersimpan setelah rejoin; lanjut Timeskip Okazu")
+                                elseif initialKijo == true then
                                     clearPendingOrigin()
                                     mayProceed = true
                                 else
                                     requestSaveRejoin()
                                 end
-                            elseif initialMamori == false then
+                            elseif initialKijo == false then
                                 task.wait(0.6)
-                                if hasMamori() == true then
+                                if hasKijoFirst() == true then
                                     markPendingOrigin()
-                                    kijoStatus("Mamori baru terdeteksi: rejoin penyimpanan")
+                                    kijoStatus("Kijo baru terdeteksi: rejoin penyimpanan")
                                     requestSaveRejoin()
                                 end
                             else
@@ -2094,26 +2098,26 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[MAMORI + KIJO ADD-ON v147] Percobaan "
+                warn("[KIJO + TIMESKIP OKAZU v1.0.63] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
                     local gui = plr and plr:FindFirstChild("PlayerGui")
                     local panel = gui and gui:FindFirstChild("KijoLiveDebugV146")
                     local button = panel and panel:FindFirstChild("CopyDebug")
-                    if button then button.Text = "KIJO ERROR inisialisasi: " .. tostring(errMain):sub(1, 150) end
+                    if button then button.Text = "OKAZU ERROR inisialisasi: " .. tostring(errMain):sub(1, 150) end
                 end)
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[KIJO v1.0.62] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[OKAZU v1.0.63] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[KIJO v1.0.62] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[OKAZU v1.0.63] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -2139,7 +2143,7 @@ local ENV = getgenv()
 local FILE = "VL_Final_Stage_" .. tostring(Player.UserId) .. ".txt"
 local KEY = "VL_Final_Stage_" .. tostring(Player.UserId)
 local REGULAR_PLACE = game.PlaceId -- Server hop ke PlaceId game yang sedang dimainkan; bukan ID tetap
-local CODES = {"UPDATE_93", "CURSED", "TOURNAMENT"}
+local CODES = {"UPDATE_94", "TSO_RETURNS", "VAMPIRES"}
 
 local function loadStage()
     local raw
@@ -2396,7 +2400,7 @@ if stage == "LEVEL" then
     else
         -- Jalankan leveling asli yang pengguna kirim dengan satu modifikasi handoff.
         ENV.__VL_LEVEL_DONE = false
-        -- v1.0.62: observasi dini DI LUAR engine asli v1.0.36;
+        -- v1.0.63: observasi dini DI LUAR engine asli v1.0.36;
         -- tidak membuat progress bar palsu, tidak mengubah klik tengah,
         -- tutorial, inisialisasi team, Return, atau worker aksi.
         __mamoriTrace("LEVEL HEALTH | memulai pemeriksaan engine + AUTO LEVEL UI")
@@ -5614,7 +5618,7 @@ if stage == "REDEEM" then
 end
 
 if stage == "ROLL" then
-    -- v1.0.62: satu worker Mamori per JobId, termasuk ketika AutoExecute
+    -- v1.0.63: satu worker Mamori per JobId, termasuk ketika AutoExecute
     -- memuat berkas dua kali pada sesi yang sama.
     local mamoriSessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
     local mamoriSessionKey = "__VL_MAMORI_ROLL_WORKER_159_" .. tostring(Player.UserId)
@@ -5628,8 +5632,8 @@ if stage == "ROLL" then
     -- AutoSpin dimulai di PlaceId hasil server hop; tidak ada gate ID tetap.
     -- Tahap ini sengaja tetap ROLL selama rejoin akibat pemilihan style / rollback.
     -- AutoSpin Mamori dan rollback asli dipertahankan sebagai blok lengkap.
-    local function runMamori()
-        __mamoriTrace("runMamori() MASUK")
+    local function runKijo()
+        __mamoriTrace("runKijo() MASUK")
 -- =====================================================================
 -- AUTO PILIH STYLE AMAN + REJOIN (TANPA PANEL DEBUG)
 -- Berdasarkan V4 yang telah diuji di Delta.
@@ -5692,14 +5696,14 @@ do
         local function isTargetDisplay(id)
             local def = getDef(id)
             return def and type(def.DisplayName) == "string"
-                and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "mamori" or false
+                and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "kijo" or false
         end
 
         -- Kumpulan contoh untuk MEMBACA rarity dari modul game, bukan hardcode
         -- angka rarity. Nama yang tidak ada di modul otomatis diabaikan.
         local referenceStyles = {
             Common = {"Hinto", "Hakochi", "Sagumi", "Tonkura", "Kishoti", "Yachikusai"},
-            Secret = {"Mamori", "Sanju", "Kisuki", "Kazana", "Hidari", "Yogan", "Feiko", "Ibara", "Kumo", "Kijo", "Mikage", "Taichou"},
+            Secret = {"Mamori", "Kijo", "Sanju", "Kisuki", "Kazana", "Hidari", "Yogan", "Feiko", "Ibara", "Kumo", "Kijo", "Mikage", "Taichou"},
             Ultra  = {"Hakka", "Akari", "Ronin"},
             Evo    = {"Encho"},
         }
@@ -5730,7 +5734,7 @@ do
                     end
                 end
             end
-            -- Tambahan v1.0.62: gunakan DisplayName dari daftar aktif bila ID
+            -- Tambahan v1.0.63: gunakan DisplayName dari daftar aktif bila ID
             -- referensi berbeda dari ID internal game.
             local known = {}
             for category, examples in pairs(referenceStyles) do
@@ -5761,7 +5765,7 @@ do
         local function classification(id, rarity, map, counts)
             local n = lower(id)
             -- ID utama tidak pernah dipilih sebagai slot pengganti.
-            if isTargetDisplay(id) then return "TERLINDUNGI", "target Mamori" end
+            if isTargetDisplay(id) then return "TERLINDUNGI", "target Kijo" end
 
             -- ID pengecualian hanya Rintaro (Sanju) dan Kimiro (Kisuki sementara).
             -- Pengecualian harus ditentukan sebelum rarity Secret dicek.
@@ -5848,7 +5852,7 @@ do
             return table.concat(signature, "|")
         end
         local envNoSlot = (typeof(getgenv) == "function" and getgenv()) or _G
-        envNoSlot["__VL_MAMORI_ALL_PROTECTED_" .. tostring(player.UserId)] =
+        envNoSlot["__VL_FIRST_KIJO_ALL_PROTECTED_" .. tostring(player.UserId)] =
             allMamoriSlotsProtectedSnapshot
 
         local function selectSafeStyle()
@@ -5963,12 +5967,12 @@ do
                     if second and first == second then
                         local env = (typeof(getgenv) == "function" and getgenv()) or _G
                         local uid = tostring(player.UserId)
-                        env["__VL_MAMORI_NO_SLOT_" .. uid] = true
-                        print("[STYLE] STOP Mamori: semua slot terlindungi;"
+                        env["__VL_FIRST_KIJO_NO_SLOT_" .. uid] = true
+                        print("[STYLE] STOP Kijo: semua slot terlindungi;"
                             .. " kirim webhook final berisi semua style langka.")
                         local notifier = env["__VL_FINAL_NOTIFY_" .. uid]
                         if type(notifier) == "function" then
-                            pcall(notifier, false, "NO_SLOT_MAMORI")
+                            pcall(notifier, false, "NO_SLOT_FIRST_KIJO")
                         end
                         return false
                     end
@@ -6195,13 +6199,13 @@ do
         -- Ini hanya diagnosis; tidak mengubah fungsi print skrip utama.
         LogBoot.MessageOut:Connect(function(msg)
             if type(msg) ~= "string" then return end
-            if msg:find("[AutoSpin] Mamori belum ditemukan -> lanjut", 1, true) then
+            if msg:find("[AutoSpin] Kijo belum ditemukan -> lanjut", 1, true) then
                 mainStartAt = os.clock()
             elseif msg:find("[AutoSpin] Rarity:", 1, true) then
                 mainDidRoll = true
             elseif msg:find("[AutoSpin] STOP TOTAL - TANPA ROLLBACK", 1, true) then
                 mainStoppedEarly = true
-            elseif msg:find("[AutoSpin] Mamori tidak terdeteksi -> rollback", 1, true) then
+            elseif msg:find("[AutoSpin] Kijo tidak terdeteksi -> rollback", 1, true) then
                 rollbackStarted = true
             end
         end)
@@ -6237,7 +6241,7 @@ do
             for _, id in pairs(list) do
                 local success, data = pcall(function() return definitions:Get(id) end)
                 if success and data and type(data.DisplayName) == "string"
-                    and data.DisplayName:match("^%s*(.-)%s*$"):lower() == "mamori" then
+                    and data.DisplayName:match("^%s*(.-)%s*$"):lower() == "kijo" then
                     return true
                 end
             end
@@ -6306,10 +6310,10 @@ do
                 local owned = isOwned(getKnit())
                 if owned == true and elapsed >= 5 and not guardClicked then
                     -- Jika sudah memutar roll, jangan mengklik tiba-tiba.
-                    if not mainDidRoll and clickCenter("Mamori sudah dimiliki") then
+                    if not mainDidRoll and clickCenter("Kijo sudah dimiliki") then
                         task.wait(1)
                         for attempt = 1, 12 do
-                            if openStyles("jalur Mamori sudah dimiliki") then break end
+                            if openStyles("jalur Kijo sudah dimiliki") then break end
                             task.wait(0.5)
                         end
                     end
@@ -6388,7 +6392,7 @@ do
 end
 
 -- =====================================================================
--- AWAL SKRIP UTAMA: TIDAK ADA SATU BARIS PUN YANG DIUBAH
+-- AWAL SKRIP UTAMA: INISIALISASI DIPERTAHANKAN, TARGET/PITY DISESUAIKAN
 -- =====================================================================
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
@@ -6401,22 +6405,22 @@ local Http = game:GetService("HttpService")
 local Player = Players.LocalPlayer
 local Knit = require(RS.Packages.Knit)
 
-local TARGET = "Mamori"
-local FLAG = "auto_style_pure_Jinko.flag"
+local TARGET = "Kijo"
+local FLAG = "auto_style_pure_Kijo_v163.flag"
 
 local StyleMod, StyleService, StyleCtrl
 local TeamSel
 local running = true
 local targetFound = false
 
--- v1.0.54: maksimum 30 Lucky Mamori per siklus rollback,
+-- v1.0.54: maksimum 30 Lucky Kijo per siklus rollback,
 -- termasuk jika rejoin terjadi sebelum 30 Lucky terpakai.
 local MAX_MAMORI_LUCKY_SPENT = 30
 local mamoriBudget = makePersistentLuckyBudget(
-    Player.UserId, "MAMORI", MAX_MAMORI_LUCKY_SPENT)
+    Player.UserId, "KIJO_FIRST", MAX_MAMORI_LUCKY_SPENT)
 local mamoriLuckyPendingBefore = nil
 local mamoriLuckyPendingSince = nil
-local lastMamoriPendingLog = -100
+local lastKijoPendingLog = -100
 local mamoriRecoveryLastAttempt = -100
 local mamoriRecoveryAttemptCount = 0
 local function mamoriWatch(message)
@@ -6426,17 +6430,17 @@ local function mamoriWatch(message)
     -- LogService.MessageOut sudah menjembatani log ini ke panel KIJO.
     -- Jangan kirim langsung lagi ke sink yang sama (menjadi duplikat).
 end
-print("[AutoSpin] Budget Lucky Mamori: " .. tostring(mamoriBudget.spent())
+print("[AutoSpin] Budget Lucky Kijo: " .. tostring(mamoriBudget.spent())
     .. "/30 (tersimpan lintas rejoin); rollback pending="
     .. tostring(mamoriBudget.isRollbackPending()))
-local function observeMamoriLucky(balance)
+local function observeKijoLucky(balance)
     local before = mamoriBudget.spent()
     local used, event = mamoriBudget.observe(balance)
     if event == "RESET_AFTER_ROLLBACK" then
-        print("[AutoSpin] Rollback Mamori terdeteksi: saldo Lucky pulih;"
+        print("[AutoSpin] Rollback Kijo terdeteksi: saldo Lucky pulih;"
             .. " budget baru 0/30")
     elseif used > before then
-        print("[AutoSpin] Lucky Mamori terpakai:", used,
+        print("[AutoSpin] Lucky Kijo terpakai:", used,
             "/30", "saldo:", balance)
     end
     if mamoriLuckyPendingBefore and type(balance) == "number"
@@ -6520,9 +6524,9 @@ local function equippedStyle()
     return rar, id
 end
 
--- CACHE KEPEMILIKAN MAMORI PER AKUN (dipercaya tanpa menunggu Style dimuat)
-local OWNED_FILE = "VL_Mamori_Owned_" .. tostring(Player.UserId) .. ".flag"
-local OWNED_KEY = "__VL_MAMORI_OWNED_" .. tostring(Player.UserId)
+-- CACHE KEPEMILIKAN KIJO (TARGET 1) PER AKUN (dipercaya tanpa menunggu Style dimuat)
+local OWNED_FILE = "VL_Kijo_Owned_" .. tostring(Player.UserId) .. ".flag"
+local OWNED_KEY = "__VL_KIJO_OWNED_" .. tostring(Player.UserId)
 local cacheEnv = (typeof(getgenv) == "function" and getgenv()) or _G
 local function ownedFromCache()
     if cacheEnv[OWNED_KEY] == true then return true end
@@ -6531,21 +6535,21 @@ local function ownedFromCache()
         if typeof(isfile) == "function" and not isfile(OWNED_FILE) then return nil end
         return readfile(OWNED_FILE)
     end)
-    if ok and data == "MAMORI_OWNED" then
+    if ok and data == "KIJO_OWNED" then
         cacheEnv[OWNED_KEY] = true
         return true
     end
     return false
 end
-local function rememberMamori()
+local function rememberKijo()
     cacheEnv[OWNED_KEY] = true
     if typeof(writefile) == "function" then
-        pcall(function() writefile(OWNED_FILE, "MAMORI_OWNED") end)
+        pcall(function() writefile(OWNED_FILE, "KIJO_OWNED") end)
     end
 end
 
--- CEK DISPLAY NAME MAMORI DI SELURUH SLOT
-local function hasMamori()
+-- CEK DISPLAY NAME KIJO DI SELURUH SLOT
+local function hasKijo()
     if targetFound or ownedFromCache() then
         return true
     end
@@ -6565,7 +6569,7 @@ local function hasMamori()
             for _, id in pairs(styles) do
                 local okDef, def = pcall(function() return StyleMod:Get(id) end)
                 if okDef and def and type(def.DisplayName) == "string"
-                    and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "mamori" then
+                    and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "kijo" then
                     found = true
                     break
                 end
@@ -6575,7 +6579,7 @@ local function hasMamori()
 
     if found then
         targetFound = true
-        rememberMamori()
+        rememberKijo()
     end
 
     return found
@@ -6583,52 +6587,52 @@ end
 
 -- v1.0.54: jika slot terakhir berubah menjadi Secret/Ultra/Evo,
 -- pertahankan aturan webhook NO SLOT, bukan rollback batas 30.
-local function stopMamoriIfNoSafeSlot()
+local function stopKijoIfNoSafeSlot()
     local uid = tostring(Player.UserId)
-    local checker = cacheEnv["__VL_MAMORI_ALL_PROTECTED_" .. uid]
+    local checker = cacheEnv["__VL_FIRST_KIJO_ALL_PROTECTED_" .. uid]
     if type(checker) ~= "function" then return false end
     local ok, first = pcall(checker)
     if not ok or type(first) ~= "string" then return false end
     task.wait(0.4)
     local ok2, second = pcall(checker)
-    if not ok2 or first ~= second or hasMamori() then return false end
-    cacheEnv["__VL_MAMORI_NO_SLOT_" .. uid] = true
+    if not ok2 or first ~= second or hasKijo() then return false end
+    cacheEnv["__VL_FIRST_KIJO_NO_SLOT_" .. uid] = true
     local notifier = cacheEnv["__VL_FINAL_NOTIFY_" .. uid]
     if type(notifier) == "function" then
-        pcall(notifier, false, "NO_SLOT_MAMORI")
+        pcall(notifier, false, "NO_SLOT_FIRST_KIJO")
     end
-    print("[AutoSpin] Semua slot Mamori terlindungi -> STOP dan webhook")
+    print("[AutoSpin] Semua slot Kijo terlindungi -> STOP dan webhook")
     running = false
     clearFlag()
     return true
 end
 
 local function stopSuccess()
-    rememberMamori()
+    rememberKijo()
     mamoriBudget.resetAfterSuccess()
     targetFound = true
     running = false
     clearFlag()
 
-    print("[AutoSpin] Mamori SUDAH DIDAPATKAN")
+    print("[AutoSpin] Kijo SUDAH DIDAPATKAN")
     print("[AutoSpin] STOP TOTAL - TANPA ROLLBACK")
 
-    notify("Mamori didapat! AutoSpin berhenti.")
+    notify("Kijo didapat! AutoSpin berhenti.")
 end
 
 -- CEK SEBELUM MENJALANKAN SCRIPT
-if hasMamori() then
+if hasKijo() then
     stopSuccess()
     return
 end
 
-print("[AutoSpin] Mamori belum ditemukan -> lanjut")
-notify("AutoSpin aktif - target Mamori")
+print("[AutoSpin] Kijo belum ditemukan -> lanjut")
+notify("AutoSpin aktif - target Kijo")
 
 task.wait(5)
 
 -- CEK ULANG
-if hasMamori() then
+if hasKijo() then
     stopSuccess()
     return
 end
@@ -6659,6 +6663,158 @@ pcall(function()
 end)
 
 task.wait(1)
+
+-- STYLE PITY FASE 1 (KIJO = Kijo3)
+-- Tidak ada spin Kijo sebelum PreferredSecret benar dan pilihan tersimpan.
+-- Setelah memilih Pity baru, lakukan rejoin, lalu cek ulang pada sesi berikutnya.
+local FIRST_PITY_ID = "Kijo3"
+local firstPityFile = "VL_KijoFirst_Pity_v163_" .. tostring(Player.UserId) .. ".txt"
+local firstPityKey = "VL_KijoFirst_Pity_v163_" .. tostring(Player.UserId)
+local function preferredFirstPity()
+    local ok, v = pcall(function()
+        return StyleCtrl.PreferredSecret and StyleCtrl.PreferredSecret:get()
+    end)
+    if not ok or not StyleCtrl.PreferredSecret then return nil end
+    return v == FIRST_PITY_ID
+end
+local function firstPityPending()
+    local value = nil
+    if typeof(readfile) == "function" then
+        pcall(function()
+            if typeof(isfile) ~= "function" or isfile(firstPityFile) then
+                value = readfile(firstPityFile)
+            end
+        end)
+    end
+    if type(value) ~= "string" or value == "" then
+        pcall(function() value = TeleportService:GetTeleportSetting(firstPityKey) end)
+    end
+    return type(value) == "string" and value ~= ""
+end
+local function saveFirstPityPending()
+    local id = tostring(game.JobId)
+    local fileOK = false
+    if typeof(writefile) == "function" then
+        fileOK = pcall(function() writefile(firstPityFile, id) end)
+    end
+    local tpOK = pcall(function() TeleportService:SetTeleportSetting(firstPityKey, id) end)
+    return fileOK or tpOK
+end
+local function clearFirstPityPending()
+    if typeof(delfile) == "function" then
+        pcall(function()
+            if typeof(isfile) ~= "function" or isfile(firstPityFile) then delfile(firstPityFile) end
+        end)
+    end
+    pcall(function() TeleportService:SetTeleportSetting(firstPityKey, "") end)
+end
+local function findFirstPityButton()
+    local gui = Player:FindFirstChild("PlayerGui")
+    local interface = gui and gui:FindFirstChild("Interface")
+    local lobby = interface and interface:FindFirstChild("Lobby")
+    local styles = lobby and lobby:FindFirstChild("Styles")
+    local secret = styles and styles:FindFirstChild("SecretPity")
+    local bg = secret and secret:FindFirstChild("BGFrame")
+    local body = bg and bg:FindFirstChild("Body")
+    local list = body and body:FindFirstChild("List")
+    return list and list:FindFirstChild(FIRST_PITY_ID)
+end
+local function selectFirstPity()
+    pcall(function()
+        Knit.GetController("InterfaceController"):SelectLobbyMenu("Styles", true)
+    end)
+    local btn = findFirstPityButton()
+    for _ = 1, 30 do
+        if btn then break end
+        task.wait(0.3)
+        btn = findFirstPityButton()
+    end
+    if not btn or not btn:IsA("GuiButton") then
+        warn("[PITY FASE 1] Tombol Kijo3 tidak ditemukan di SecretPity")
+        return false
+    end
+    local ups = (debug and debug.getupvalues) or getupvalues
+    if type(ups) ~= "function" or type(getconnections) ~= "function" then
+        warn("[PITY FASE 1] getconnections/getupvalues tidak tersedia")
+        return false
+    end
+    local ok, connections = pcall(getconnections, btn.Activated)
+    if not ok or type(connections) ~= "table" then return false end
+    for _, conn in ipairs(connections) do
+        if type(conn.Function) == "function" then
+            local good, vals = pcall(ups, conn.Function)
+            if good and type(vals) == "table" then
+                for _, obj in pairs(vals) do
+                    if type(obj) == "table" and type(obj.OnActivated) == "function" then
+                        local fired, err = pcall(obj.OnActivated)
+                        if not fired then
+                            fired, err = pcall(obj.OnActivated, obj)
+                        end
+                        if not fired then
+                            warn("[PITY FASE 1] Callback gagal: " .. tostring(err))
+                        else
+                            for _ = 1, 25 do
+                                if preferredFirstPity() == true then
+                                    print("[PITY FASE 1] Kijo3 terkonfirmasi")
+                                    return true
+                                end
+                                task.wait(0.2)
+                            end
+                            warn("[PITY FASE 1] Callback jalan tapi pilihan belum terkonfirmasi")
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+local function waitForFirstPity()
+    local selectedHere = false
+    local lastRejoin = -100
+    while running and Player.Parent do
+        local selected = preferredFirstPity()
+        if selected == true then
+            if firstPityPending() then
+                if selectedHere then
+                    if os.clock() - lastRejoin > 14 then
+                        lastRejoin = os.clock()
+                        print("[PITY FASE 1] Rejoin untuk menyimpan Kijo3; spin ditahan")
+                        local ok, err = pcall(function() TeleportService:Teleport(game.PlaceId, Player) end)
+                        if not ok then warn("[PITY FASE 1] Rejoin gagal: " .. tostring(err)) end
+                    end
+                    task.wait(2)
+                else
+                    clearFirstPityPending()
+                    print("[PITY FASE 1] Kijo3 tersimpan setelah rejoin; spin diizinkan")
+                    return true
+                end
+            else
+                print("[PITY FASE 1] Kijo3 telah terpilih, spin diizinkan")
+                return true
+            end
+        elseif selected == false then
+            if firstPityPending() then clearFirstPityPending() end
+            if selectFirstPity() then
+                if saveFirstPityPending() then
+                    selectedHere = true
+                    print("[PITY FASE 1] Kijo3 dipilih; wajib rejoin sebelum spin")
+                else
+                    warn("[PITY FASE 1] Gagal menyimpan penanda Pity; tahan spin")
+                end
+            end
+            task.wait(2)
+        else
+            print("[PITY FASE 1] PreferredSecret belum siap; menunggu")
+            task.wait(2)
+        end
+    end
+    return false
+end
+if not waitForFirstPity() then
+    warn("[PITY FASE 1] Kijo3 belum siap; AutoSpin tidak dimulai")
+    return
+end
 
 local function getRollRF()
     local idx = RS:FindFirstChild("Packages")
@@ -6745,7 +6901,7 @@ end
 -- ROLLBACK DENGAN PENGAMAN
 local function doRollback()
 
-    if targetFound or hasMamori() then
+    if targetFound or hasKijo() then
         stopSuccess()
         return
     end
@@ -6754,18 +6910,18 @@ local function doRollback()
     for i = 1, 5 do
         task.wait(0.3)
 
-        if targetFound or hasMamori() then
+        if targetFound or hasKijo() then
             stopSuccess()
             return
         end
     end
 
-    if targetFound or hasMamori() then
+    if targetFound or hasKijo() then
         stopSuccess()
         return
     end
 
-    print("[AutoSpin] Mamori tidak terdeteksi -> rollback")
+    print("[AutoSpin] Kijo tidak terdeteksi -> rollback")
     mamoriBudget.markRollback()
 
     local ok = pcall(function()
@@ -6810,7 +6966,7 @@ pcall(function()
 end)
 
 -- CEK SEKALI LAGI SEBELUM SPIN
-if hasMamori() then
+if hasKijo() then
     stopSuccess()
     return
 end
@@ -6821,7 +6977,7 @@ task.spawn(function()
     while running do
 
         -- CEK TARGET SETIAP LOOP
-        if hasMamori() then
+        if hasKijo() then
             stopSuccess()
             break
         end
@@ -6839,11 +6995,11 @@ task.spawn(function()
                 and StyleCtrl.LuckySpins:get()
                 or 0
         end)
-        observeMamoriLucky(lucky)
+        observeKijoLucky(lucky)
 
-        if stopMamoriIfNoSafeSlot() then break end
+        if stopKijoIfNoSafeSlot() then break end
         if mamoriBudget.capped() then
-            print("[AutoSpin] BATAS 30 Lucky Mamori tercapai -> rollback")
+            print("[AutoSpin] BATAS 30 Lucky Kijo tercapai -> rollback")
             saveFlag()
             doRollback()
             running = false
@@ -6851,8 +7007,8 @@ task.spawn(function()
         end
         if mamoriLuckyPendingBefore then
             local age = mamoriLuckyPendingSince and (os.clock() - mamoriLuckyPendingSince) or 0
-            if os.clock() - lastMamoriPendingLog > 6 then
-                lastMamoriPendingLog = os.clock()
+            if os.clock() - lastKijoPendingLog > 6 then
+                lastKijoPendingLog = os.clock()
                 mamoriWatch("PENDING Lucky sebelum=" .. tostring(mamoriLuckyPendingBefore)
                     .. " sekarang=" .. tostring(lucky) .. " normal=" .. tostring(spins)
                     .. " tunggu=" .. tostring(math.floor(age)) .. "s; roll berikut ditahan")
@@ -6875,7 +7031,7 @@ task.spawn(function()
                     .. " | refresh=" .. tostring(freshLucky)
                     .. " | ok=" .. tostring(okFresh))
                 if okFresh and type(freshLucky) == "number" then
-                    observeMamoriLucky(freshLucky)
+                    observeKijoLucky(freshLucky)
                 end
                 if mamoriLuckyPendingBefore then
                     mamoriWatch("RECOVERY REJOIN: saldo masih pending; tidak spin ulang")
@@ -6928,21 +7084,21 @@ task.spawn(function()
             print("[AutoSpin] Rarity:", rar, "ID:", id)
             mamoriWatch("ROLL RESULT id=" .. tostring(id) .. " rarity=" .. tostring(rar))
 
-            -- PRIORITAS UTAMA: MAMORI
-            local resultIsMamori = false
+            -- PRIORITAS UTAMA: KIJO
+            local resultIsKijo = false
             if id and StyleMod then
                 local okDef, def = pcall(function() return StyleMod:Get(id) end)
-                resultIsMamori = okDef and def
+                resultIsKijo = okDef and def
                     and type(def.DisplayName) == "string"
-                    and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "mamori"
+                    and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "kijo"
             end
-            if resultIsMamori then
+            if resultIsKijo then
                 stopSuccess()
                 break
             end
 
             -- CEK INVENTORY SETELAH SPIN
-            if hasMamori() then
+            if hasKijo() then
                 stopSuccess()
                 break
             end
@@ -6957,16 +7113,16 @@ task.spawn(function()
                 for _ = 1, 25 do
                     local afterValue
                     pcall(function() afterValue = StyleCtrl.LuckySpins:get() end)
-                    observeMamoriLucky(afterValue)
+                    observeKijoLucky(afterValue)
                     if not mamoriLuckyPendingBefore then break end
-                    if hasMamori() then
+                    if hasKijo() then
                         stopSuccess()
                         return
                     end
                     task.wait(0.2)
                 end
                 if mamoriLuckyPendingBefore then
-                    warn("[AutoSpin] Roll Lucky Mamori diterima tetapi saldo belum"
+                    warn("[AutoSpin] Roll Lucky Kijo diterima tetapi saldo belum"
                         .. " turun; menunggu sinkronisasi, tidak spin lagi")
                     task.wait(0.5)
                     continue
@@ -6980,30 +7136,30 @@ task.spawn(function()
                     and StyleCtrl.LuckySpins:get()
                     or 0
             end)
-            observeMamoriLucky(luckyAfter)
+            observeKijoLucky(luckyAfter)
 
             if luckyAfter <= 0 or mamoriBudget.capped() then
 
                 -- CEK SEBELUM ROLLBACK
-                if hasMamori() then
+                if hasKijo() then
                     stopSuccess()
                     break
                 end
 
                 print(mamoriBudget.capped()
-                    and "[AutoSpin] Batas 30 Lucky tercapai, memeriksa Mamori"
-                    or "[AutoSpin] Lucky habis, memeriksa Mamori")
+                    and "[AutoSpin] Batas 30 Lucky tercapai, memeriksa Kijo"
+                    or "[AutoSpin] Lucky habis, memeriksa Kijo")
 
                 -- TUNGGU UPDATE DATA
                 task.wait(1)
 
-                if hasMamori() then
+                if hasKijo() then
                     stopSuccess()
                     break
                 end
 
-                -- MAMORI BELUM TERDETEKSI
-                if stopMamoriIfNoSafeSlot() then break end
+                -- KIJO BELUM TERDETEKSI
+                if stopKijoIfNoSafeSlot() then break end
                 saveFlag()
                 doRollback()
                 running = false
@@ -7034,7 +7190,7 @@ do
     -- melalui LogService pada executor tertentu, fallback log tidak aktif.
     Log.MessageOut:Connect(function(message)
         if type(message) ~= "string" then return end
-        if message:find("[AutoSpin] Mamori SUDAH DIDAPATKAN", 1, true) then
+        if message:find("[AutoSpin] Kijo SUDAH DIDAPATKAN", 1, true) then
             fallbackUsed = true
             return
         end
@@ -7042,11 +7198,11 @@ do
             hasRolledThisSession = true
             rollErrors = 0
         end
-        if message:find("[AutoSpin] Mamori tidak terdeteksi -> rollback", 1, true) then
+        if message:find("[AutoSpin] Kijo tidak terdeteksi -> rollback", 1, true) then
             rollbackMentioned = true
             teleportCalled = true
             task.delay(12, function()
-                if not teleportStarted and not hasMamori() then
+                if not teleportStarted and not hasKijo() then
                     warn("[ROLLBACK GUARD] Rollback diminta, tetapi teleport belum terkonfirmasi. Periksa UpdateKeybind/TeleportService.")
                 end
             end)
@@ -7065,7 +7221,7 @@ do
             fallbackUsed = true
             task.spawn(function()
                 task.wait(0.6)
-                if hasMamori() then return end
+                if hasKijo() then return end
                 local stable = true
                 for _ = 1, 4 do
                     local ok, spins, lucky = pcall(function()
@@ -7078,7 +7234,7 @@ do
                     end
                     task.wait(0.4)
                 end
-                if not stable or hasMamori() or rollbackMentioned then
+                if not stable or hasKijo() or rollbackMentioned then
                     warn("[ROLLBACK GUARD] Stop 0-spin terjadi, tetapi data tidak stabil/target sudah ada; fallback dibatalkan")
                     return
                 end
@@ -7102,7 +7258,7 @@ do
         end)
     end)
     TeleportService.TeleportInitFailed:Connect(function(player, result, errorMessage)
-        if player ~= Player or not rollbackMentioned or hasMamori() then return end
+        if player ~= Player or not rollbackMentioned or hasKijo() then return end
         warn("[ROLLBACK GUARD] Teleport gagal:", tostring(result), tostring(errorMessage))
         if teleportRetries >= 2 then
             warn("[ROLLBACK GUARD] Batas 2 percobaan ulang teleport tercapai")
@@ -7110,7 +7266,7 @@ do
         end
         teleportRetries = teleportRetries + 1
         task.delay(2, function()
-            if hasMamori() then return end
+            if hasKijo() then return end
             local ok, err = pcall(function()
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
             end)
@@ -7167,7 +7323,7 @@ end
         warn("[FINAL] Tidak dapat membaca data spin dalam 30 detik: " .. lastStatus)
         if typeof(writefile) == "function" then
             pcall(function()
-                writefile("VL_Mamori_Startup_Status.txt", "FAIL: " .. lastStatus)
+                writefile("VL_Kijo_Startup_Status.txt", "FAIL: " .. lastStatus)
             end)
         end
         return false
@@ -7176,12 +7332,12 @@ end
     if waitForSpinData() then
         if typeof(writefile) == "function" then
             pcall(function()
-                writefile("VL_Mamori_Startup_Status.txt", "READY: Memulai AutoSpin. Jika spin dan lucky 0, MAIN LOOP asli akan STOP.")
+                writefile("VL_Kijo_Startup_Status.txt", "READY: Memulai AutoSpin. Jika spin dan lucky 0, MAIN LOOP asli akan STOP.")
             end)
         end
-        __mamoriTrace("MEMANGGIL runMamori() SEKARANG")
-        runMamori()
-        __mamoriTrace("runMamori() KEMBALI")
+        __mamoriTrace("MEMANGGIL runKijo() SEKARANG")
+        runKijo()
+        __mamoriTrace("runKijo() KEMBALI")
     else
         __mamoriTrace("GAGAL waitForSpinData() -> AutoSpin tidak dimulai")
         -- Izinkan percobaan ulang pada sesi yang sama setelah gagal bootstrap.
