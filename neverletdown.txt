@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.63 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling v1.0.36 retained
+-- VERSION: v1.0.64 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling & team nonblocking, tutorial retained
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -136,20 +136,20 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.63: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.64: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.63] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.64] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.63] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.64] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.63] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.64] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
--- ADD-ON TARGET KEDUA v1.0.63: KIJO -> TIMESKIP OKAZU
+-- ADD-ON TARGET KEDUA v1.0.64: KIJO -> TIMESKIP OKAZU
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
 --  * Pemilihan slot meniru Mamori: Common > aman > Rintaro/Kimiro (terakhir).
@@ -218,21 +218,21 @@ do
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "OKAZU v1.0.63: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "OKAZU v1.0.64: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[OKAZU v1.0.63] " .. kijoLastStatus
+                    local line = "[OKAZU v1.0.64] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "OKAZU v1.0.63: " .. kijoLastStatus
+                        kijoDebugButton.Text = "OKAZU v1.0.64: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
-                -- v1.0.63: deduplikasi sink langsung vs LogService.
+                -- v1.0.64: deduplikasi sink langsung vs LogService.
                 local seenLog = {}
                 local bridgeEnv = (typeof(getgenv) == "function" and getgenv()) or _G
                 bridgeEnv.__VL_DEBUG_SINK = function(message)
@@ -244,7 +244,7 @@ do
                     if #kijoLogs > 350 then table.remove(kijoLogs, 1) end
                     kijoLastStatus = line
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "v1.0.63: " .. line:sub(1, 170)
+                        kijoDebugButton.Text = "v1.0.64: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -257,6 +257,8 @@ do
                         or message:find("[PITY FASE 1]", 1, true)
                         or message:find("[MAMORI WATCH]", 1, true)
                         or message:find("[LEVEL BOOT]", 1, true)
+                        or message:find("[LEVEL TEAM]", 1, true)
+                        or message:find("[LEVEL ACTION]", 1, true)
                         or message:find("[LEVEL TUTORIAL]", 1, true)
                         or message:find("[LEVEL RECOVERY]", 1, true)
                         or message:find("[STARTUP FIX]", 1, true) then
@@ -563,7 +565,7 @@ do
                     return nil
                 end
                 local inventoryRareStyleSummary
-                -- v1.0.63: webhook akhir untuk Kijo (fase 1) dan Timeskip Okazu (fase 2).
+                -- v1.0.64: webhook akhir untuk Kijo (fase 1) dan Timeskip Okazu (fase 2).
                 local function notifyFinal(hasKijo, reason)
                     reason = reason or "FINAL"
                     if webhookBusy then return end
@@ -2098,7 +2100,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[KIJO + TIMESKIP OKAZU v1.0.63] Percobaan "
+                warn("[KIJO + TIMESKIP OKAZU v1.0.64] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2110,14 +2112,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[OKAZU v1.0.63] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[OKAZU v1.0.64] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[OKAZU v1.0.63] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[OKAZU v1.0.64] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -2143,7 +2145,7 @@ local ENV = getgenv()
 local FILE = "VL_Final_Stage_" .. tostring(Player.UserId) .. ".txt"
 local KEY = "VL_Final_Stage_" .. tostring(Player.UserId)
 local REGULAR_PLACE = game.PlaceId -- Server hop ke PlaceId game yang sedang dimainkan; bukan ID tetap
-local CODES = {"UPDATE_94", "TSO_RETURNS", "VAMPIRES"}
+local CODES = {"UPDATE_93", "CURSED", "TOURNAMENT", "UPDATE_94", "TSO_RETURNS", "VAMPIRES"}
 
 local function loadStage()
     local raw
@@ -2400,9 +2402,9 @@ if stage == "LEVEL" then
     else
         -- Jalankan leveling asli yang pengguna kirim dengan satu modifikasi handoff.
         ENV.__VL_LEVEL_DONE = false
-        -- v1.0.63: observasi dini DI LUAR engine asli v1.0.36;
-        -- tidak membuat progress bar palsu, tidak mengubah klik tengah,
-        -- tutorial, inisialisasi team, Return, atau worker aksi.
+        -- v1.0.64: observasi dini DI LUAR engine asli v1.0.36;
+        -- tidak membuat progress bar palsu; klik tengah, tutorial, Return dipertahankan.
+        -- Team join dan worker aksi dilepas dari satu gate konfirmasi.
         __mamoriTrace("LEVEL HEALTH | memulai pemeriksaan engine + AUTO LEVEL UI")
         task.spawn(function()
             local t0 = os.clock()
@@ -4741,16 +4743,24 @@ local function runTeamCycle(generation)
     if position then
         task.wait(0.12 + ((position - 1) * 0.18))
     end
+    local lastTeamLog = -100
     while generationIsCurrent(generation) do
         if teamLooksConfirmed(targetTeamId) then
             if waitForStableLocalConfirmation(generation, targetTeamId) then
                 if waitForPairSeparation(generation, snapshot, targetTeamId) then
                     teamJoinFinished = true
+                    warn('[LEVEL TEAM] Bergabung dan terkonfirmasi: Team ' .. tostring(targetTeamId))
                     return true
                 end
             end
         end
-        joinTeam(targetTeamId)
+        local sent = joinTeam(targetTeamId)
+        if os.clock() - lastTeamLog >= 12 then
+            lastTeamLog = os.clock()
+            warn('[LEVEL TEAM] Request Team ' .. tostring(targetTeamId)
+                .. ' | remote=' .. tostring(sent)
+                .. ' | confirmed=' .. tostring(teamLooksConfirmed(targetTeamId)))
+        end
         task.wait(TEAM_RETRY_DELAY)
     end
     return false
@@ -4783,6 +4793,7 @@ local function invalidateTeamAssignment(startImmediately)
 end
 local function initializeJoins()
     if not isConfiguredUsername(player.Name) then
+        warn('[LEVEL TEAM] Username tidak ada di daftar team; join otomatis membutuhkan username terdaftar')
         return false
     end
     if teamGeneration == 0 then
@@ -4837,6 +4848,14 @@ local function correctLockedTeam()
 end
 local function sanityCheckTeam()
     if roundResetActive or not getgenv().main then
+        return
+    end
+    -- Team retries must not interrupt Coach/tutorial. Action workers do not wait on this confirmation.
+    if not tutorialGateCleared or tutorialStillActive() then
+        return
+    end
+    -- The primary team-cycle already owns retries; avoid a second concurrent RequestJoin worker.
+    if teamCycleRunningGeneration == teamGeneration then
         return
     end
     local currentSignature = getPresentSignature()
@@ -4901,7 +4920,7 @@ Players.PlayerAdded:Connect(function(p)
     watchTeamPlayer(p)
     if isConfiguredUsername(p.Name) then
         task.defer(function()
-            if not roundResetActive then
+            if not roundResetActive and tutorialGateCleared and not tutorialStillActive() then
                 invalidateTeamAssignment(true)
             end
         end)
@@ -4912,7 +4931,7 @@ Players.PlayerRemoving:Connect(function(p)
     watchedTeamPlayers[p] = nil
     if isConfiguredUsername(p.Name) then
         task.defer(function()
-            if not roundResetActive then
+            if not roundResetActive and tutorialGateCleared and not tutorialStillActive() then
                 invalidateTeamAssignment(true)
             end
         end)
@@ -5100,10 +5119,7 @@ end)
 task.wait(0.1)
 local startupGatePassed = false
 task.spawn(function()
-    -- Jangan RequestJoin/Serve saat Coach tutorial masih mengatur state UI.
-    -- Hanya worker team yang menunggu; modul auto-level/UI sudah tetap ter-load.
-    -- Tutorial bukan prasyarat jika memang TIDAK aktif.
-    -- Jika belum selesai, tunggu; tetapi apabila tidak ada tutorial, lanjut segera.
+    -- Tutorial is still mandatory; the team confirmation is NOT a gate for leveling.
     while detectorIsCurrent() and not tutorialGateFinished do
         task.wait(0.20)
     end
@@ -5111,13 +5127,29 @@ task.spawn(function()
         return
     end
 
-    warn('[STARTUP FIX] Tutorial tidak aktif/selesai -> mulai team join')
-    local confirmedTeamBeforeFeatures = initializeJoins()
-    if confirmedTeamBeforeFeatures and detectorIsCurrent() then
-        runStartupDetection()
-        if detectorIsCurrent() and not rejoinStarted then
-            startupGatePassed = true
+    -- Team work runs independently. initializeJoins may take a long time to confirm,
+    -- but it must never hold the ball-action worker or level progress panel hostage.
+    task.spawn(function()
+        warn('[LEVEL TEAM] Mulai meminta tim (terpisah dari leveling; tetap retry hingga masuk)')
+        local ok, result = pcall(initializeJoins)
+        if not ok then
+            warn('[LEVEL TEAM] Worker error: ' .. tostring(result))
+        elseif result then
+            warn('[LEVEL TEAM] Konfirmasi tim berhasil')
+        elseif detectorIsCurrent() then
+            warn('[LEVEL TEAM] Tim belum terkonfirmasi; sanity worker tetap mencoba')
         end
+    end)
+
+    -- Retain server safety/collision checks, but they do not depend on the team.
+    task.spawn(function()
+        local ok, err = pcall(runStartupDetection)
+        if not ok then warn('[STARTUP FIX] Detection error: ' .. tostring(err)) end
+    end)
+
+    if detectorIsCurrent() and not rejoinStarted then
+        startupGatePassed = true
+        warn('[LEVEL ACTION] START: tutorial selesai; konfirmasi tim TIDAK mengunci leveling')
     end
 end)
 local Players2 = game:GetService("Players")
@@ -5393,7 +5425,7 @@ end
 RunService2.Heartbeat:Connect(function()
 	if not detectorIsCurrent() then return end
 	if not startupGatePassed then return end
-	if not teamJoinFinished or not lockedTeamId then return end
+	-- Team join is attempted in parallel, never used as the leveling/TP gate.
 	if not tpOn() then return end
 	local ball = select(1, getBall())
 	local hrp = getHRP2()
@@ -5404,9 +5436,13 @@ RunService2.Heartbeat:Connect(function()
 	end
 end)
 task.spawn(function()
+    -- Diagnostic tick means the action worker is alive, even if no ball has spawned yet.
+    __env.__xynLevelActionTick149 = os.clock()
+    warn('[LEVEL ACTION] Worker aktif; tanpa syarat teamJoinFinished')
 	while detectorIsCurrent() do
+        __env.__xynLevelActionTick149 = os.clock()
 		local waitT = tonumber(tb.Text) or 0.05
-		if not startupGatePassed or not teamJoinFinished or not lockedTeamId then
+		if not startupGatePassed then
 			task.wait(0.25)
 			continue
 		end
@@ -5430,6 +5466,7 @@ task.spawn(function()
 					lastPrint = tick()
 				end
 				local key = "Block" .. math.random(1000000, 9999999)
+                __env.__xynLevelBallAttemptAt = os.clock()
 				pcall(function()
 					CreateHitbox:InvokeServer({
 						BallId = bid,
@@ -5476,6 +5513,7 @@ task.spawn(function()
 					lastPrint = tick()
 				end
 				local realTilt = Vector3.new(look.X, 1, look.Z)
+                __env.__xynLevelBallAttemptAt = os.clock()
 				pcall(function()
 					Interact:InvokeServer({
 						Charge = 1,
@@ -5592,10 +5630,13 @@ end
                 lastLevelPulse = os.clock()
                 local tickAction = tonumber(ENV.__xynLevelActionTick149)
                 local age = tickAction and math.floor(os.clock() - tickAction) or -1
+                local lastBallAttempt = tonumber(ENV.__xynLevelBallAttemptAt)
+                local ballAge = lastBallAttempt and math.floor(os.clock() - lastBallAttempt) or -1
                 __mamoriTrace("LEVEL WAIT | level=" .. tostring(Player:GetAttribute("User_Level"))
                     .. " | bootReady=" .. tostring(ENV.__xynBootReadyVersion)
                     .. " | run=" .. tostring(ENV.__xynSuperRunVersion)
-                    .. " | workerAge=" .. tostring(age) .. "s")
+                    .. " | workerAge=" .. tostring(age) .. "s"
+                    .. " | ballAttemptAge=" .. tostring(ballAge) .. "s")
             end
             task.wait(0.25)
         end
@@ -5618,7 +5659,7 @@ if stage == "REDEEM" then
 end
 
 if stage == "ROLL" then
-    -- v1.0.63: satu worker Mamori per JobId, termasuk ketika AutoExecute
+    -- v1.0.64: satu worker Mamori per JobId, termasuk ketika AutoExecute
     -- memuat berkas dua kali pada sesi yang sama.
     local mamoriSessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
     local mamoriSessionKey = "__VL_MAMORI_ROLL_WORKER_159_" .. tostring(Player.UserId)
@@ -5734,7 +5775,7 @@ do
                     end
                 end
             end
-            -- Tambahan v1.0.63: gunakan DisplayName dari daftar aktif bila ID
+            -- Tambahan v1.0.64: gunakan DisplayName dari daftar aktif bila ID
             -- referensi berbeda dari ID internal game.
             local known = {}
             for category, examples in pairs(referenceStyles) do
