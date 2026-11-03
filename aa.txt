@@ -1,7 +1,6 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.64 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling v1.0.36 retained
+-- VERSION: v1.0.66 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling & team nonblocking, tutorial retained
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
-
 -- v1.0.54: budget Lucky Spins per akun dan per fase, persisten saat rejoin.
 -- Tidak mengubah fungsi spin, Pity, atau mekanisme rollback yang sudah ada.
 local function makePersistentLuckyBudget(userId, phase, maximum)
@@ -9,22 +8,38 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
     local env = (typeof(getgenv) == "function" and getgenv()) or _G
     local key = "VL_Lucky30_Budget_v154_" .. phase .. "_" .. tostring(userId)
     local filename = key .. ".txt"
-    local state = {spent = 0, last = nil, rollbackPending = false}
+    -- v1.0.66: limit disimpan per fase agar jatah tidak berubah saat rejoin.
+    -- Format penyimpanan lama (v1) masih dapat dibaca.
+    local state = {spent = 0, last = nil, rollbackPending = false, limit = nil}
 
     local function encode()
-        return "v1|" .. tostring(state.spent) .. "|"
+        return "v2|" .. tostring(state.spent) .. "|"
             .. tostring(state.last or -1) .. "|"
-            .. (state.rollbackPending and "1" or "0")
+            .. (state.rollbackPending and "1" or "0") .. "|"
+            .. tostring(state.limit or -1)
     end
     local function decode(value)
         if type(value) ~= "string" then return false end
-        local used, last, pending = value:match("^v1|(%d+)|([%-]?%d+)|([01])$")
-        used, last = tonumber(used), tonumber(last)
+        local used, last, pending, limit = value:match(
+            "^v2|(%d+)|([%-]?%d+)|([01])|([%-]?%d+)$")
+        local legacy = false
+        if not used then
+            used, last, pending = value:match("^v1|(%d+)|([%-]?%d+)|([01])$")
+            legacy = true
+        end
+        used, last, limit = tonumber(used), tonumber(last), tonumber(limit)
         if not used or used < 0 or used > 100000
-            or not last or last < -1 or last > 1000000 then return false end
+            or not last or last < -1 or last > 1000000
+            or (not legacy and (not limit or limit < -1 or limit > maximum)) then
+            return false
+        end
         state.spent = used
-        state.last = last == -1 and nil or last
+        state.last = last
+        if last == -1 then state.last = nil end
         state.rollbackPending = pending == "1"
+        -- Budget lama yang telah terpakai dipertahankan sampai rollback.
+        state.limit = legacy and (used > 0 and maximum or nil)
+            or (limit == -1 and nil or limit)
         return true
     end
     local loaded = false
@@ -65,8 +80,9 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
             event = "INIT"
         elseif balance ~= state.last then
             if state.rollbackPending and balance > state.last then
-                -- Rollback berhasil: saldo Lucky pulih. Mulai siklus 30 baru.
+                -- Rollback berhasil: hitungan dan jatah diulang dari saldo pulih.
                 state.spent = 0
+                state.limit = nil
                 state.rollbackPending = false
                 event = "RESET_AFTER_ROLLBACK"
             elseif balance < state.last then
@@ -79,6 +95,23 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
             state.last = balance
             save()
         end
+        if state.limit == nil and balance > 0 then
+            -- Jangan mengunci jatah saat saldo sementara terbaca 0
+            -- sebelum StyleController selesai sinkron.
+            -- Jangan menghitung ulang pembagian jika rejoin di tengah fase.
+            if state.spent > 0 then
+                state.limit = maximum -- pemulihan budget lawas yang sedang berjalan
+            elseif phase == "KIJO_FIRST" and balance <= 29 then
+                state.limit = math.ceil(balance / 2)
+            elseif phase == "TIMESKIP_OKAZU" and balance <= 29 then
+                -- Semua sisa Kijo menjadi jatah TSO, tanpa dibagi lagi.
+                state.limit = balance
+            else
+                state.limit = maximum
+            end
+            save()
+            event = event or "LIMIT_INIT"
+        end
         return state.spent, event
     end
     local function markRollback()
@@ -88,13 +121,15 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
     local function resetAfterSuccess()
         state.spent = 0
         state.last = nil
+        state.limit = nil
         state.rollbackPending = false
         save()
     end
     return {
         observe = observe,
         spent = function() return state.spent end,
-        capped = function() return state.spent >= maximum end,
+        limit = function() return state.limit or maximum end,
+        capped = function() return state.spent >= (state.limit or maximum) end,
         markRollback = markRollback,
         resetAfterSuccess = resetAfterSuccess,
         isRollbackPending = function() return state.rollbackPending end,
@@ -133,20 +168,20 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.64: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.66: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.64] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.66] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.64] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.66] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.64] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.66] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
--- ADD-ON TARGET KEDUA v1.0.64: KIJO -> TIMESKIP OKAZU
+-- ADD-ON TARGET KEDUA v1.0.66: KIJO -> TIMESKIP OKAZU
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
 --  * Pemilihan slot meniru Mamori: Common > aman > Rintaro/Kimiro (terakhir).
@@ -215,21 +250,21 @@ do
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "OKAZU v1.0.64: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "OKAZU v1.0.66: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[OKAZU v1.0.64] " .. kijoLastStatus
+                    local line = "[OKAZU v1.0.66] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "OKAZU v1.0.64: " .. kijoLastStatus
+                        kijoDebugButton.Text = "OKAZU v1.0.66: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
-                -- v1.0.64: deduplikasi sink langsung vs LogService.
+                -- v1.0.66: deduplikasi sink langsung vs LogService.
                 local seenLog = {}
                 local bridgeEnv = (typeof(getgenv) == "function" and getgenv()) or _G
                 bridgeEnv.__VL_DEBUG_SINK = function(message)
@@ -241,7 +276,7 @@ do
                     if #kijoLogs > 350 then table.remove(kijoLogs, 1) end
                     kijoLastStatus = line
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "v1.0.64: " .. line:sub(1, 170)
+                        kijoDebugButton.Text = "v1.0.66: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -254,6 +289,8 @@ do
                         or message:find("[PITY FASE 1]", 1, true)
                         or message:find("[MAMORI WATCH]", 1, true)
                         or message:find("[LEVEL BOOT]", 1, true)
+                        or message:find("[LEVEL TEAM]", 1, true)
+                        or message:find("[LEVEL ACTION]", 1, true)
                         or message:find("[LEVEL TUTORIAL]", 1, true)
                         or message:find("[LEVEL RECOVERY]", 1, true)
                         or message:find("[STARTUP FIX]", 1, true) then
@@ -538,9 +575,7 @@ do
                     return false
                 end
 
-                -- Hasil akhir hanya dicatat secara lokal; tanpa HTTP ke Discord.
-
-local function showPopup()
+                local function showPopup()
                     if hasKijoFirst() ~= true or hasSecretAbility() ~= true then return end
                     publishHistory("STYLE", "Kijo", true)
                     local ownedSlots = readSignal(abilityA.Abilities)
@@ -813,7 +848,8 @@ local function showPopup()
                 local kijoLuckyPendingBefore = nil
                 local clearKijoInitialDecision -- ditetapkan di blok komitmen Kijo
                 kijoStatus("Budget Lucky Timeskip Okazu: " .. tostring(kijoBudget.spent())
-                    .. "/30 (tersimpan lintas rejoin); rollback pending="
+                    .. "/" .. tostring(kijoBudget.limit())
+                    .. " (tersimpan lintas rejoin); rollback pending="
                     .. tostring(kijoBudget.isRollbackPending()))
                 local function observeKijoLucky(balance)
                     local before = kijoBudget.spent()
@@ -825,10 +861,11 @@ local function showPopup()
                             clearKijoInitialDecision()
                         end
                         kijoStatus("Rollback Timeskip Okazu terdeteksi: saldo Lucky pulih;"
-                            .. " budget baru 0/30")
+                            .. " budget baru 0/" .. tostring(kijoBudget.limit()))
                     elseif used > before then
                         kijoStatus("Lucky Timeskip Okazu terpakai " .. tostring(used)
-                            .. "/30 | Sisa saldo " .. tostring(balance))
+                            .. "/" .. tostring(kijoBudget.limit())
+                            .. " | Sisa saldo " .. tostring(balance))
                     end
                     if kijoLuckyPendingBefore and type(balance) == "number"
                         and balance < kijoLuckyPendingBefore then
@@ -1038,8 +1075,6 @@ local function showPopup()
                     calibrationComplete = counts.Secret > 0
                         and counts.Ultra > 0 and counts.Evo > 0
                 end
-                -- v1.0.52: semua style Secret/Ultra/Evo dari SELURUH slot,
-                -- bukan hanya slot aktif atau dua target.
                 local function isProtectedResult(id)
                     if type(id) ~= "string" or id == "" then return true end
                     local def = styleDef(id)
@@ -1441,7 +1476,7 @@ local function showPopup()
                     kijoBudget.markRollback()
                     kijoRollbackInFlight = true
                     kijoStatus((kijoLuckyCapReached()
-                        and ("Batas " .. tostring(MAX_KIJO_LUCKY_SPENT)
+                        and ("Batas " .. tostring(kijoBudget.limit())
                             .. " Lucky Timeskip Okazu tercapai, saldo=" .. tostring(remaining))
                         or "Lucky habis (0)")
                         .. ", Timeskip Okazu belum ada: ROLLBACK seperti Kijo")
@@ -1515,7 +1550,7 @@ local function showPopup()
                     if available ~= false then return false end
                     kijoFinished = true
                     finishToZero()
-                    kijoStatus("STOP Timeskip Okazu: tidak ada slot aman; spin dihentikan. "
+                    kijoStatus("STOP Timeskip Okazu: tidak ada slot aman. "
                         .. tostring(detail or reason))
                     return true
                 end
@@ -1543,7 +1578,8 @@ local function showPopup()
                         ctrl = getStyleContext()
                         rollRF = rollRF or findStyleRemote("Roll")
                         selectRF = selectRF or findStyleRemote("SelectSlot")
-                        -- Jika semua slot terlindungi, status STOP tidak menunggu remote SelectSlot.
+                        -- v1.0.52: bila semua slot Kijo terlindungi, STOP
+                        -- tidak perlu menunggu remote SelectSlot.
                         -- Bila masih ada slot aman, syarat remote tetap seperti semula.
                         if ctrl and selectRF then break end
                         if ctrl then
@@ -1559,7 +1595,15 @@ local function showPopup()
                         task.wait(0.3)
                     end
                     if not playerA.Parent then return end
-                    observeKijoLucky(readSignal(ctrl and ctrl.LuckySpins))
+                    local saldoTsoAwal = readSignal(ctrl and ctrl.LuckySpins)
+                    local _, batasTsoEvent = kijoBudget.observe(saldoTsoAwal)
+                    if batasTsoEvent == "LIMIT_INIT" or batasTsoEvent == "INIT"
+                        or batasTsoEvent == "RESET_AFTER_ROLLBACK" then
+                        kijoStatus("Jatah TSO: " .. tostring(kijoBudget.limit())
+                            .. " dari saldo " .. tostring(saldoTsoAwal)
+                            .. " (seluruh sisa Kijo jika <=29, maksimal 30 lainnya)")
+                    end
+                    observeKijoLucky(saldoTsoAwal)
                     local kijoBefore = hasTimeskipOkazu()
                     if kijoBefore == nil then
                         kijoStatus("Inventory Timeskip Okazu belum siap; tunggu sinkronisasi")
@@ -1615,7 +1659,8 @@ local function showPopup()
                     observeKijoLucky(readSignal(ctrl.LuckySpins))
                     if dupOK == false then
                         if dupWhy == "LUCKY_CAP" or kijoLuckyCapReached() then
-                            kijoRollbackOrNoSlot("Batas 30 Lucky Timeskip Okazu saat pembersihan duplikat")
+                            kijoRollbackOrNoSlot("Batas " .. tostring(kijoBudget.limit())
+                                .. " Lucky Timeskip Okazu saat pembersihan duplikat")
                             return
                         end
                         kijoStatus("Duplikat Kijo belum tuntas: " .. tostring(dupWhy))
@@ -1643,7 +1688,8 @@ local function showPopup()
                     end
                     if lucky <= 0 or kijoLuckyCapReached() then
                         kijoStatus(kijoLuckyCapReached()
-                            and "Batas 30 Lucky Timeskip Okazu tercapai: ROLLBACK"
+                            and ("Batas " .. tostring(kijoBudget.limit())
+                                .. " Lucky Timeskip Okazu tercapai: ROLLBACK")
                             or "Lucky 0, pencarian Timeskip Okazu AKTIF: ROLLBACK seperti Kijo")
                         kijoRollbackOrNoSlot()
                         return
@@ -1675,7 +1721,8 @@ local function showPopup()
                         local currentBudgetLucky = readSignal(ctrl.LuckySpins)
                         observeKijoLucky(currentBudgetLucky)
                         if kijoLuckyCapReached() then
-                            kijoRollbackOrNoSlot("30 Lucky Timeskip Okazu sudah digunakan")
+                            kijoRollbackOrNoSlot(tostring(kijoBudget.limit())
+                                .. " Lucky Timeskip Okazu sudah digunakan")
                             return
                         end
                         if kijoLuckyPendingBefore then
@@ -1706,7 +1753,8 @@ local function showPopup()
                                 elseif currentLucky <= 0 or kijoLuckyCapReached() then
                                     -- Sama seperti Mamori: tunggu 1 detik, cek, baru rollback.
                                     kijoStatus(kijoLuckyCapReached()
-                                        and "30 Lucky Timeskip Okazu digunakan, cek Timeskip Okazu sebelum rollback"
+                                        and (tostring(kijoBudget.limit())
+                                            .. " Lucky Timeskip Okazu digunakan, cek Timeskip Okazu sebelum rollback")
                                         or "Lucky habis, cek Timeskip Okazu")
                                     task.wait(1)
                                     kijoRollbackOrNoSlot()
@@ -1769,7 +1817,7 @@ local function showPopup()
                                             end
                                             if kijoLuckyPendingBefore then
                                                 kijoStatus("Saldo Lucky belum berubah setelah roll Timeskip Okazu;"
-                                                    .. " tahan spin agar batas 30 tidak terlewati")
+                                                    .. " tahan spin agar jatah tidak terlewati")
                                                 return
                                             end
                                             task.wait(0.55) -- jeda tetap
@@ -1878,7 +1926,7 @@ local function showPopup()
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[KIJO + TIMESKIP OKAZU v1.0.64] Percobaan "
+                warn("[KIJO + TIMESKIP OKAZU v1.0.66] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -1890,14 +1938,14 @@ local function showPopup()
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[OKAZU v1.0.64] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[OKAZU v1.0.66] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[OKAZU v1.0.64] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[OKAZU v1.0.66] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -1923,7 +1971,7 @@ local ENV = getgenv()
 local FILE = "VL_Final_Stage_" .. tostring(Player.UserId) .. ".txt"
 local KEY = "VL_Final_Stage_" .. tostring(Player.UserId)
 local REGULAR_PLACE = game.PlaceId -- Server hop ke PlaceId game yang sedang dimainkan; bukan ID tetap
-local CODES = {"UPDATE_94", "TSO_RETURNS", "VAMPIRES"}
+local CODES = {"UPDATE_93", "CURSED", "TOURNAMENT", "UPDATE_94", "TSO_RETURNS", "VAMPIRES"}
 
 local function loadStage()
     local raw
@@ -2180,9 +2228,9 @@ if stage == "LEVEL" then
     else
         -- Jalankan leveling asli yang pengguna kirim dengan satu modifikasi handoff.
         ENV.__VL_LEVEL_DONE = false
-        -- v1.0.64: observasi dini DI LUAR engine asli v1.0.36;
-        -- tidak membuat progress bar palsu, tidak mengubah klik tengah,
-        -- tutorial, inisialisasi team, Return, atau worker aksi.
+        -- v1.0.66: observasi dini DI LUAR engine asli v1.0.36;
+        -- tidak membuat progress bar palsu; klik tengah, tutorial, Return dipertahankan.
+        -- Team join dan worker aksi dilepas dari satu gate konfirmasi.
         __mamoriTrace("LEVEL HEALTH | memulai pemeriksaan engine + AUTO LEVEL UI")
         task.spawn(function()
             local t0 = os.clock()
@@ -2227,7 +2275,6 @@ local function __xynIsCurrentRun()
     return __env.main == true
         and __env.__xynSuperRunVersion == __runVersion
 end
--- Leveling berlaku untuk pemain lokal tanpa daftar akun.
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -2670,12 +2717,18 @@ task.spawn(function()
     end
 end)
 task.wait(0.1)
--- Cek hanya lifecycle proses yang sedang aktif.
+getgenv().__xynLevelDetectorVersion = (getgenv().__xynLevelDetectorVersion or 0) + 1
+local detectorVersion = getgenv().__xynLevelDetectorVersion
 local function detectorIsCurrent()
     return __xynIsCurrentRun()
+        and getgenv().__xynLevelDetectorVersion == detectorVersion
 end
+-- =====================================================
+-- BAD SERVER BLACKLIST + EXPLICIT SERVER HOP
+-- Server berkualitas buruk dari pemeriksaan ping dapat ditandai BAD;
+-- pertahankan mekanisme pindah server karena ping tinggi.
+-- =====================================================
 
--- Server hop untuk ping tinggi tetap tersedia.
 local BAD_SERVER_FILE = "xyn_bad_servers.json"
 local BAD_SERVER_TELEPORT_KEY = "__xynBadServerHistory"
 local MAX_BAD_SERVERS = 50
@@ -3082,7 +3135,6 @@ local function runStartupDetection()
         handleHighPing()
         return
     end
-
 end
 local RequestJoin = nil
 local Serve = nil
@@ -3364,63 +3416,333 @@ end
 local function teamLooksConfirmed(teamId)
     return teamLooksConfirmedFor(player, teamId)
 end
--- AUTO TEAM JOIN MANDIRI.
--- Prioritas Team 1, coba Team 2 bila gagal; leveling TIDAK menunggu join.
-local TEAM_RETRY_DELAY = 1.0
+-- Tim otomatis untuk LocalPlayer tanpa filter akun eksternal.
+local function getPresentConfiguredPlayerObjects()
+    return player and player.Parent and {player} or {}
+end
+local function getPresentSignatureFrom(snapshot)
+    local ids = {}
+    for _, p in ipairs(snapshot) do
+        table.insert(ids, tostring(p.UserId))
+    end
+    return table.concat(ids, "|")
+end
+local function getPresentSignature()
+    return getPresentSignatureFrom(getPresentConfiguredPlayerObjects())
+end
+local function getTargetTeamFromSnapshot(targetPlayer, snapshot)
+    if not targetPlayer then
+        return nil, nil
+    end
+    for index, p in ipairs(snapshot) do
+        if p == targetPlayer or p.UserId == targetPlayer.UserId then
+            return (index % 2 == 1) and 1 or 2, index
+        end
+    end
+    return nil, nil
+end
+local TEAM_ROSTER_STABLE_TIME = 1.50
+local TEAM_CONFIRM_STABLE_TIME = 0.80
+local TEAM_RETRY_DELAY = 0.85
+local TEAM_SANITY_INTERVAL = 2.00
+local teamGeneration = 0
+local teamCycleRunningGeneration = nil
+local correctionRunningGeneration = nil
 local teamJoinFinished = false
 local lockedTeamId = nil
+local lockedRosterSignature = nil
 local roundResetActive = false
-local teamWorkerRunning = false
-local teamJoinAttempts = 0
-
-local function runAutoTeamJoin()
-    if teamWorkerRunning then return end
-    teamWorkerRunning = true
-    task.spawn(function()
-        while detectorIsCurrent() do
-            if not roundResetActive and not tutorialStillActive() then
-                local confirmedTeam = nil
-                if teamLooksConfirmed(1) then
-                    confirmedTeam = 1
-                elseif teamLooksConfirmed(2) then
-                    confirmedTeam = 2
-                end
-                if confirmedTeam then
-                    teamJoinFinished = true
-                    lockedTeamId = confirmedTeam
-                    teamJoinAttempts = 0
-                else
-                    teamJoinFinished = false
-                    lockedTeamId = nil
-                    teamJoinAttempts += 1
-                    -- 3 percobaan Team 1, kemudian 1 Team 2 (ulang hingga diterima).
-                    local targetTeam = (teamJoinAttempts % 4 == 0) and 2 or 1
-                    local ok, result = joinTeam(targetTeam)
-                    if ok and teamLooksConfirmed(targetTeam) then
-                        teamJoinFinished = true
-                        lockedTeamId = targetTeam
-                    elseif teamJoinAttempts % 8 == 0 then
-                        warn('[TEAM AUTO] Join belum dikonfirmasi; percobaan='
-                            .. tostring(teamJoinAttempts) .. ', target='
-                            .. tostring(targetTeam) .. ', respons=' .. tostring(result))
-                    end
+local function generationIsCurrent(generation)
+    return getgenv().main
+        and detectorIsCurrent()
+        and generation == teamGeneration
+end
+local function waitForStableRoster(generation)
+    local lastSignature = nil
+    local stableSince = 0
+    while generationIsCurrent(generation) do
+        local snapshot = getPresentConfiguredPlayerObjects()
+        local signature = getPresentSignatureFrom(snapshot)
+        if signature ~= lastSignature then
+            lastSignature = signature
+            stableSince = os.clock()
+        elseif os.clock() - stableSince >= TEAM_ROSTER_STABLE_TIME then
+            return snapshot, signature
+        end
+        task.wait(0.15)
+    end
+    return nil, nil
+end
+local function waitForStableLocalConfirmation(generation, targetTeamId)
+    local stableSince = nil
+    while generationIsCurrent(generation) do
+        if teamLooksConfirmed(targetTeamId) then
+            stableSince = stableSince or os.clock()
+            if os.clock() - stableSince >= TEAM_CONFIRM_STABLE_TIME then
+                return true
+            end
+        else
+            stableSince = nil
+            return false
+        end
+        task.wait(0.10)
+    end
+    return false
+end
+local function findSameTeamPartner()
+    local myTeam = player.Team
+    for _, partner in ipairs(getPresentConfiguredPlayerObjects()) do
+        if partner ~= player then
+            local partnerTeam = partner.Team
+            if myTeam and partnerTeam and myTeam == partnerTeam then
+                return partner
+            end
+            for teamId = 1, 2 do
+                if teamLooksConfirmedFor(player, teamId)
+                    and teamLooksConfirmedFor(partner, teamId)
+                then
+                    return partner
                 end
             end
-            task.wait(TEAM_RETRY_DELAY)
         end
-        teamWorkerRunning = false
+    end
+    return nil
+end
+local function getKnownTeamIdFor(targetPlayer)
+    for teamId = 1, 2 do
+        if teamLooksConfirmedFor(targetPlayer, teamId) then
+            return teamId
+        end
+    end
+    return nil
+end
+local function pairSeparatedState(snapshot)
+    if #snapshot ~= 2 then
+        return true
+    end
+    local partner = snapshot[1] == player and snapshot[2] or snapshot[1]
+    if not partner or partner == player then
+        return true
+    end
+    if player.Team and partner.Team then
+        return player.Team ~= partner.Team
+    end
+    local myTeamId = getKnownTeamIdFor(player)
+    local partnerTeamId = getKnownTeamIdFor(partner)
+    if myTeamId and partnerTeamId then
+        return myTeamId ~= partnerTeamId
+    end
+    return nil
+end
+local function waitForPairSeparation(generation, snapshot, targetTeamId)
+    if #snapshot ~= 2 then
+        return true
+    end
+    local separatedSince = nil
+    while generationIsCurrent(generation) do
+        if not teamLooksConfirmed(targetTeamId) then
+            return false
+        end
+        local state = pairSeparatedState(snapshot)
+        if state == true then
+            separatedSince = separatedSince or os.clock()
+            if os.clock() - separatedSince >= 0.60 then
+                return true
+            end
+        else
+            separatedSince = nil
+        end
+        task.wait(0.10)
+    end
+    return false
+end
+local function runTeamCycle(generation)
+    local snapshot, signature = waitForStableRoster(generation)
+    if not snapshot or not generationIsCurrent(generation) then
+        return false
+    end
+    local targetTeamId, position = getTargetTeamFromSnapshot(player, snapshot)
+    if not targetTeamId then
+        return false
+    end
+    lockedTeamId = targetTeamId
+    lockedRosterSignature = signature
+    teamJoinFinished = false
+    if position then
+        task.wait(0.12 + ((position - 1) * 0.18))
+    end
+    local lastTeamLog = -100
+    while generationIsCurrent(generation) do
+        if teamLooksConfirmed(targetTeamId) then
+            if waitForStableLocalConfirmation(generation, targetTeamId) then
+                if waitForPairSeparation(generation, snapshot, targetTeamId) then
+                    teamJoinFinished = true
+                    warn('[LEVEL TEAM] Bergabung dan terkonfirmasi: Team ' .. tostring(targetTeamId))
+                    return true
+                end
+            end
+        end
+        local sent = joinTeam(targetTeamId)
+        if os.clock() - lastTeamLog >= 12 then
+            lastTeamLog = os.clock()
+            warn('[LEVEL TEAM] Request Team ' .. tostring(targetTeamId)
+                .. ' | remote=' .. tostring(sent)
+                .. ' | confirmed=' .. tostring(teamLooksConfirmed(targetTeamId)))
+        end
+        task.wait(TEAM_RETRY_DELAY)
+    end
+    return false
+end
+local function launchTeamCycle()
+    if roundResetActive or not getgenv().main then
+        return
+    end
+    local generation = teamGeneration
+    if teamCycleRunningGeneration == generation then
+        return
+    end
+    teamCycleRunningGeneration = generation
+    task.spawn(function()
+        runTeamCycle(generation)
+        if teamCycleRunningGeneration == generation then
+            teamCycleRunningGeneration = nil
+        end
     end)
 end
-
-local function beginRoundTeamReset()
-    roundResetActive = true
+local function invalidateTeamAssignment(startImmediately)
+    teamGeneration = teamGeneration + 1
     teamJoinFinished = false
     lockedTeamId = nil
+    lockedRosterSignature = nil
+    correctionRunningGeneration = nil
+    if startImmediately and not roundResetActive then
+        launchTeamCycle()
+    end
+end
+local function initializeJoins()
+    if teamGeneration == 0 then
+        invalidateTeamAssignment(true)
+    else
+        launchTeamCycle()
+    end
+    while getgenv().main and detectorIsCurrent() do
+        if teamJoinFinished and lockedTeamId then
+            return true
+        end
+        if not roundResetActive and teamCycleRunningGeneration == nil then
+            launchTeamCycle()
+        end
+        task.wait(0.15)
+    end
+    return false
+end
+local function correctLockedTeam()
+    if roundResetActive then
+        return
+    end
+    if not lockedTeamId then
+        launchTeamCycle()
+        return
+    end
+    local generation = teamGeneration
+    if correctionRunningGeneration == generation then
+        return
+    end
+    correctionRunningGeneration = generation
+    teamJoinFinished = false
+    local targetTeamId = lockedTeamId
+    task.spawn(function()
+        while generationIsCurrent(generation)
+            and not roundResetActive
+            and lockedTeamId == targetTeamId
+        do
+            if teamLooksConfirmed(targetTeamId) then
+                if waitForStableLocalConfirmation(generation, targetTeamId) then
+                    teamJoinFinished = true
+                    break
+                end
+            end
+            joinTeam(targetTeamId)
+            task.wait(TEAM_RETRY_DELAY)
+        end
+        if correctionRunningGeneration == generation then
+            correctionRunningGeneration = nil
+        end
+    end)
+end
+local function sanityCheckTeam()
+    if roundResetActive or not getgenv().main then
+        return
+    end
+    -- Team retries must not interrupt Coach/tutorial. Action workers do not wait on this confirmation.
+    if not tutorialGateCleared or tutorialStillActive() then
+        return
+    end
+    -- The primary team-cycle already owns retries; avoid a second concurrent RequestJoin worker.
+    if teamCycleRunningGeneration == teamGeneration then
+        return
+    end
+    local currentSignature = getPresentSignature()
+    if lockedRosterSignature and currentSignature ~= lockedRosterSignature then
+        invalidateTeamAssignment(true)
+        return
+    end
+    if not lockedTeamId then
+        launchTeamCycle()
+        return
+    end
+    if not teamLooksConfirmed(lockedTeamId) then
+        correctLockedTeam()
+        return
+    end
+    local sameTeamPartner = findSameTeamPartner()
+    if sameTeamPartner then
+        local snapshot = getPresentConfiguredPlayerObjects()
+        local myTarget = getTargetTeamFromSnapshot(player, snapshot)
+        if myTarget and myTarget ~= lockedTeamId then
+            invalidateTeamAssignment(true)
+            return
+        end
+    end
+end
+local function beginRoundTeamReset()
+    if roundResetActive then return end
+    roundResetActive = true
+    teamGeneration = teamGeneration + 1
+    teamJoinFinished = false
+    lockedTeamId = nil
+    lockedRosterSignature = nil
+    correctionRunningGeneration = nil
 end
 local function finishRoundTeamReset()
     roundResetActive = false
-    runAutoTeamJoin()
+    invalidateTeamAssignment(true)
 end
+local watchedTeamPlayers = {}
+local function watchTeamPlayer(p)
+    if p ~= player or watchedTeamPlayers[p] then
+        return
+    end
+    watchedTeamPlayers[p] = true
+    p:GetPropertyChangedSignal("Team"):Connect(function()
+        if not detectorIsCurrent() or not getgenv().main then return end
+        if p == player
+            and lastRequestedTeamId
+            and os.clock() - lastRequestAt <= 3
+            and p.Team
+        then
+            rememberTeamObject(lastRequestedTeamId, p.Team)
+        end
+        task.defer(sanityCheckTeam)
+    end)
+end
+watchTeamPlayer(player)
+task.spawn(function()
+    while getgenv().main and detectorIsCurrent() do
+        task.wait(TEAM_SANITY_INTERVAL)
+        sanityCheckTeam()
+    end
+end)
 local function ClickAtPosition(x, y)
     VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
     task.wait(0.05)
@@ -3441,12 +3763,12 @@ end
 local function GetMousePosition()
     return UIS:GetMouseLocation()
 end
-local function isInJoinedTeam()
-    return teamJoinFinished and lockedTeamId ~= nil
+local function isInTeam1()
+    return teamJoinFinished and lockedTeamId == 1
 end
 local function startAutoClickLoop()
     task.spawn(function()
-        while autoClick and isInJoinedTeam() do
+        while autoClick and isInTeam1() do
             local pos = GetMousePosition()
             pcall(ClickAtPosition, pos.X, pos.Y)
             task.wait(clickCD)
@@ -3567,7 +3889,7 @@ end
 RunService.Heartbeat:Connect(function()
     if not detectorIsCurrent() then return end
     handleShiftLock()
-    if isInJoinedTeam() and autoClick and (os.clock() - lastClick >= clickDelay) then
+    if isInTeam1() and autoClick and (os.clock() - lastClick >= clickDelay) then
         local pos = GetMousePosition()
         pcall(ClickAtPosition, pos.X, pos.Y)
         lastClick = os.clock()
@@ -3597,10 +3919,7 @@ end)
 task.wait(0.1)
 local startupGatePassed = false
 task.spawn(function()
-    -- Jangan RequestJoin/Serve saat Coach tutorial masih mengatur state UI.
-    -- Hanya worker team yang menunggu; modul auto-level/UI sudah tetap ter-load.
-    -- Tutorial bukan prasyarat jika memang TIDAK aktif.
-    -- Jika belum selesai, tunggu; tetapi apabila tidak ada tutorial, lanjut segera.
+    -- Tutorial is still mandatory; the team confirmation is NOT a gate for leveling.
     while detectorIsCurrent() and not tutorialGateFinished do
         task.wait(0.20)
     end
@@ -3608,11 +3927,30 @@ task.spawn(function()
         return
     end
 
-    -- Auto leveling dimulai sesudah tutorial; usaha masuk tim berlangsung paralel.
-    startupGatePassed = true
-    warn('[STARTUP FIX] Tutorial selesai; leveling aktif tanpa menunggu konfirmasi tim')
-    runAutoTeamJoin()
-    task.spawn(runStartupDetection) -- deteksi ping tetap berjalan tanpa whitelist
+    -- Team work runs independently. initializeJoins may take a long time to confirm,
+    -- but it must never hold the ball-action worker or level progress panel hostage.
+    task.spawn(function()
+        warn('[LEVEL TEAM] Mulai meminta tim (terpisah dari leveling; tetap retry hingga masuk)')
+        local ok, result = pcall(initializeJoins)
+        if not ok then
+            warn('[LEVEL TEAM] Worker error: ' .. tostring(result))
+        elseif result then
+            warn('[LEVEL TEAM] Konfirmasi tim berhasil')
+        elseif detectorIsCurrent() then
+            warn('[LEVEL TEAM] Tim belum terkonfirmasi; sanity worker tetap mencoba')
+        end
+    end)
+
+    -- Pemeriksaan ping/server aman tetap independen dari worker join tim.
+    task.spawn(function()
+        local ok, err = pcall(runStartupDetection)
+        if not ok then warn('[STARTUP FIX] Detection error: ' .. tostring(err)) end
+    end)
+
+    if detectorIsCurrent() and not rejoinStarted then
+        startupGatePassed = true
+        warn('[LEVEL ACTION] START: tutorial selesai; konfirmasi tim TIDAK mengunci leveling')
+    end
 end)
 local Players2 = game:GetService("Players")
 local RS2 = game:GetService("ReplicatedStorage")
@@ -3887,6 +4225,7 @@ end
 RunService2.Heartbeat:Connect(function()
 	if not detectorIsCurrent() then return end
 	if not startupGatePassed then return end
+	-- Team join is attempted in parallel, never used as the leveling/TP gate.
 	if not tpOn() then return end
 	local ball = select(1, getBall())
 	local hrp = getHRP2()
@@ -3897,7 +4236,11 @@ RunService2.Heartbeat:Connect(function()
 	end
 end)
 task.spawn(function()
+    -- Diagnostic tick means the action worker is alive, even if no ball has spawned yet.
+    __env.__xynLevelActionTick149 = os.clock()
+    warn('[LEVEL ACTION] Worker aktif; tanpa syarat teamJoinFinished')
 	while detectorIsCurrent() do
+        __env.__xynLevelActionTick149 = os.clock()
 		local waitT = tonumber(tb.Text) or 0.05
 		if not startupGatePassed then
 			task.wait(0.25)
@@ -3923,6 +4266,7 @@ task.spawn(function()
 					lastPrint = tick()
 				end
 				local key = "Block" .. math.random(1000000, 9999999)
+                __env.__xynLevelBallAttemptAt = os.clock()
 				pcall(function()
 					CreateHitbox:InvokeServer({
 						BallId = bid,
@@ -3969,6 +4313,7 @@ task.spawn(function()
 					lastPrint = tick()
 				end
 				local realTilt = Vector3.new(look.X, 1, look.Z)
+                __env.__xynLevelBallAttemptAt = os.clock()
 				pcall(function()
 					Interact:InvokeServer({
 						Charge = 1,
@@ -4085,10 +4430,13 @@ end
                 lastLevelPulse = os.clock()
                 local tickAction = tonumber(ENV.__xynLevelActionTick149)
                 local age = tickAction and math.floor(os.clock() - tickAction) or -1
+                local lastBallAttempt = tonumber(ENV.__xynLevelBallAttemptAt)
+                local ballAge = lastBallAttempt and math.floor(os.clock() - lastBallAttempt) or -1
                 __mamoriTrace("LEVEL WAIT | level=" .. tostring(Player:GetAttribute("User_Level"))
                     .. " | bootReady=" .. tostring(ENV.__xynBootReadyVersion)
                     .. " | run=" .. tostring(ENV.__xynSuperRunVersion)
-                    .. " | workerAge=" .. tostring(age) .. "s")
+                    .. " | workerAge=" .. tostring(age) .. "s"
+                    .. " | ballAttemptAge=" .. tostring(ballAge) .. "s")
             end
             task.wait(0.25)
         end
@@ -4111,7 +4459,7 @@ if stage == "REDEEM" then
 end
 
 if stage == "ROLL" then
-    -- v1.0.64: satu worker Mamori per JobId, termasuk ketika AutoExecute
+    -- v1.0.66: satu worker Mamori per JobId, termasuk ketika AutoExecute
     -- memuat berkas dua kali pada sesi yang sama.
     local mamoriSessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
     local mamoriSessionKey = "__VL_MAMORI_ROLL_WORKER_159_" .. tostring(Player.UserId)
@@ -4132,7 +4480,7 @@ if stage == "ROLL" then
 -- Berdasarkan V4 yang telah diuji di Delta.
 -- Prioritas: Common -> style aman -> Rintaro/Kimiro.
 -- Mamori, Secret lainnya, Ultra, Evo tidak dipilih.
--- Jika seluruh slot terlindungi: berhenti tanpa mengirim data keluar.
+-- Jika seluruh slot terlindungi: berhenti tanpa pengiriman eksternal.
 -- Jika slot berganti dan terverifikasi: rejoin place yang sama.
 -- Jika slot sesuai sejak awal: tidak rejoin.
 -- =====================================================================
@@ -4227,7 +4575,7 @@ do
                     end
                 end
             end
-            -- Tambahan v1.0.64: gunakan DisplayName dari daftar aktif bila ID
+            -- Tambahan v1.0.66: gunakan DisplayName dari daftar aktif bila ID
             -- referensi berbeda dari ID internal game.
             local known = {}
             for category, examples in pairs(referenceStyles) do
@@ -4431,7 +4779,7 @@ do
             local target = commonTarget or normalTarget or exceptionTarget
             if not target then
                 -- v1.0.52: hanya final jika SEMUA slot pasti terlindungi.
-                -- Data yang belum siap tidak boleh memicu STOP palsu.
+                -- Data yang belum siap tidak boleh memicu keputusan STOP final.
                 local function protectedSnapshot()
                     local raw = getStyles()
                     local entries = scan()
@@ -4458,16 +4806,12 @@ do
                     task.wait(1)
                     local second = protectedSnapshot()
                     if second and first == second then
-                        local env = (typeof(getgenv) == "function" and getgenv()) or _G
-                        local uid = tostring(player.UserId)
-                        env["__VL_FIRST_KIJO_NO_SLOT_" .. uid] = true
-                        print("[STYLE] STOP Kijo: semua slot terlindungi;"
-                            .. " tanpa mengubah style langka.")
+                        print("[STYLE] STOP Kijo: semua slot terlindungi; tidak melakukan spin.")
                         return false
                     end
                 end
                 warn("[STYLE] Belum ada slot aman, tetapi data slot/rarity"
-                    .. " belum pasti. AutoSpin ditahan tanpa Kick.")
+                    .. " belum pasti. AutoSpin ditahan; tanpa Kick.")
                 return false
             end
 
@@ -4515,7 +4859,7 @@ do
         end
 
         -- Jika slot baru dipilih, rejoin sedang dicoba lalu skrip ini berhenti;
-        -- jika semua slot terlindungi, STOP lokal. Jika slot benar, lanjut.
+        -- jika semua slot terlindungi, STOP. Jika slot benar, lanjut.
         __mamoriTrace("SEBELUM selectSafeStyle()")
         if not selectSafeStyle() then
             __mamoriTrace("selectSafeStyle() FALSE -> keluar sebelum AutoSpin")
@@ -4920,17 +5264,23 @@ local function mamoriWatch(message)
     -- Jangan kirim langsung lagi ke sink yang sama (menjadi duplikat).
 end
 print("[AutoSpin] Budget Lucky Kijo: " .. tostring(mamoriBudget.spent())
-    .. "/30 (tersimpan lintas rejoin); rollback pending="
+    .. "/" .. tostring(mamoriBudget.limit())
+    .. " (tersimpan lintas rejoin); rollback pending="
     .. tostring(mamoriBudget.isRollbackPending()))
 local function observeKijoLucky(balance)
     local before = mamoriBudget.spent()
     local used, event = mamoriBudget.observe(balance)
+    if event == "LIMIT_INIT" or event == "INIT"
+        or event == "RESET_AFTER_ROLLBACK" then
+        mamoriWatch("Jatah Kijo aktif " .. tostring(mamoriBudget.limit())
+            .. "/30 (Lucky saat mulai=" .. tostring(balance) .. ")")
+    end
     if event == "RESET_AFTER_ROLLBACK" then
         print("[AutoSpin] Rollback Kijo terdeteksi: saldo Lucky pulih;"
-            .. " budget baru 0/30")
+            .. " budget baru 0/" .. tostring(mamoriBudget.limit()))
     elseif used > before then
         print("[AutoSpin] Lucky Kijo terpakai:", used,
-            "/30", "saldo:", balance)
+            "/" .. tostring(mamoriBudget.limit()), "saldo:", balance)
     end
     if mamoriLuckyPendingBefore and type(balance) == "number"
         and balance < mamoriLuckyPendingBefore then
@@ -5074,8 +5424,8 @@ local function hasKijo()
     return found
 end
 
--- Bila slot terakhir menjadi Secret/Ultra/Evo,
--- STOP lokal tanpa rollback batas 30.
+-- v1.0.54: jika slot terakhir berubah menjadi Secret/Ultra/Evo,
+-- pertahankan aturan STOP NO SLOT, bukan rollback batas 30.
 local function stopKijoIfNoSafeSlot()
     local uid = tostring(Player.UserId)
     local checker = cacheEnv["__VL_FIRST_KIJO_ALL_PROTECTED_" .. uid]
@@ -5085,8 +5435,7 @@ local function stopKijoIfNoSafeSlot()
     task.wait(0.4)
     local ok2, second = pcall(checker)
     if not ok2 or first ~= second or hasKijo() then return false end
-    cacheEnv["__VL_FIRST_KIJO_NO_SLOT_" .. uid] = true
-    print("[AutoSpin] Semua slot Kijo terlindungi -> STOP")
+    print("[AutoSpin] Semua slot Kijo terlindungi -> STOP tanpa spin")
     running = false
     clearFlag()
     return true
@@ -5440,13 +5789,7 @@ end
 -- CEK FLAG
 pcall(function()
     if isfile and isfile(FLAG) then
-        local c = readfile(FLAG):match("^%s*(.-)%s*$")
-
-        if c == "1" or c == "" then
-            print("[AutoSpin] Flag ditemukan")
-        else
-            clearFlag()
-        end
+        print("[AutoSpin] Flag ditemukan")
     end
 end)
 
@@ -5467,24 +5810,27 @@ task.spawn(function()
             break
         end
 
-        local spins, lucky = 0, 0
+        local spins, lucky = nil, nil
 
         pcall(function()
-            spins = StyleCtrl.Spins
-                and StyleCtrl.Spins:get()
-                or 0
+            spins = StyleCtrl.Spins and StyleCtrl.Spins:get()
         end)
 
         pcall(function()
-            lucky = StyleCtrl.LuckySpins
-                and StyleCtrl.LuckySpins:get()
-                or 0
+            lucky = StyleCtrl.LuckySpins and StyleCtrl.LuckySpins:get()
         end)
+        -- Saldo nil berarti data belum siap, bukan Lucky 0.
+        -- Jangan mengurangi budget berdasarkan snapshot sementara.
+        if type(spins) ~= "number" or type(lucky) ~= "number" then
+            task.wait(0.5)
+            continue
+        end
         observeKijoLucky(lucky)
 
         if stopKijoIfNoSafeSlot() then break end
         if mamoriBudget.capped() then
-            print("[AutoSpin] BATAS 30 Lucky Kijo tercapai -> rollback")
+            print("[AutoSpin] BATAS " .. tostring(mamoriBudget.limit())
+                .. " Lucky Kijo tercapai -> rollback")
             saveFlag()
             doRollback()
             running = false
@@ -5632,7 +5978,8 @@ task.spawn(function()
                 end
 
                 print(mamoriBudget.capped()
-                    and "[AutoSpin] Batas 30 Lucky tercapai, memeriksa Kijo"
+                    and ("[AutoSpin] Batas " .. tostring(mamoriBudget.limit())
+                        .. " Lucky tercapai, memeriksa Kijo")
                     or "[AutoSpin] Lucky habis, memeriksa Kijo")
 
                 -- TUNGGU UPDATE DATA
