@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.64 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling & team nonblocking, tutorial retained
+-- VERSION: v1.0.65 | STYLE 1 Kijo (Pity Kijo3) -> STYLE 2 Timeskip Okazu (Pity TimeskipToru4) | leveling & team nonblocking, tutorial retained
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
 -- Kosong = webhook nonaktif; skrip Mamori/Ability tetap berjalan normal.
@@ -12,22 +12,38 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
     local env = (typeof(getgenv) == "function" and getgenv()) or _G
     local key = "VL_Lucky30_Budget_v154_" .. phase .. "_" .. tostring(userId)
     local filename = key .. ".txt"
-    local state = {spent = 0, last = nil, rollbackPending = false}
+    -- v1.0.65: limit disimpan per fase agar jatah tidak berubah saat rejoin.
+    -- Format penyimpanan lama (v1) masih dapat dibaca.
+    local state = {spent = 0, last = nil, rollbackPending = false, limit = nil}
 
     local function encode()
-        return "v1|" .. tostring(state.spent) .. "|"
+        return "v2|" .. tostring(state.spent) .. "|"
             .. tostring(state.last or -1) .. "|"
-            .. (state.rollbackPending and "1" or "0")
+            .. (state.rollbackPending and "1" or "0") .. "|"
+            .. tostring(state.limit or -1)
     end
     local function decode(value)
         if type(value) ~= "string" then return false end
-        local used, last, pending = value:match("^v1|(%d+)|([%-]?%d+)|([01])$")
-        used, last = tonumber(used), tonumber(last)
+        local used, last, pending, limit = value:match(
+            "^v2|(%d+)|([%-]?%d+)|([01])|([%-]?%d+)$")
+        local legacy = false
+        if not used then
+            used, last, pending = value:match("^v1|(%d+)|([%-]?%d+)|([01])$")
+            legacy = true
+        end
+        used, last, limit = tonumber(used), tonumber(last), tonumber(limit)
         if not used or used < 0 or used > 100000
-            or not last or last < -1 or last > 1000000 then return false end
+            or not last or last < -1 or last > 1000000
+            or (not legacy and (not limit or limit < -1 or limit > maximum)) then
+            return false
+        end
         state.spent = used
-        state.last = last == -1 and nil or last
+        state.last = last
+        if last == -1 then state.last = nil end
         state.rollbackPending = pending == "1"
+        -- Budget lama yang telah terpakai dipertahankan sampai rollback.
+        state.limit = legacy and (used > 0 and maximum or nil)
+            or (limit == -1 and nil or limit)
         return true
     end
     local loaded = false
@@ -68,8 +84,9 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
             event = "INIT"
         elseif balance ~= state.last then
             if state.rollbackPending and balance > state.last then
-                -- Rollback berhasil: saldo Lucky pulih. Mulai siklus 30 baru.
+                -- Rollback berhasil: hitungan dan jatah diulang dari saldo pulih.
                 state.spent = 0
+                state.limit = nil
                 state.rollbackPending = false
                 event = "RESET_AFTER_ROLLBACK"
             elseif balance < state.last then
@@ -82,6 +99,23 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
             state.last = balance
             save()
         end
+        if state.limit == nil and balance > 0 then
+            -- Jangan mengunci jatah saat saldo sementara terbaca 0
+            -- sebelum StyleController selesai sinkron.
+            -- Jangan menghitung ulang pembagian jika rejoin di tengah fase.
+            if state.spent > 0 then
+                state.limit = maximum -- pemulihan budget lawas yang sedang berjalan
+            elseif phase == "KIJO_FIRST" and balance <= 29 then
+                state.limit = math.ceil(balance / 2)
+            elseif phase == "TIMESKIP_OKAZU" and balance <= 29 then
+                -- Semua sisa Kijo menjadi jatah TSO, tanpa dibagi lagi.
+                state.limit = balance
+            else
+                state.limit = maximum
+            end
+            save()
+            event = event or "LIMIT_INIT"
+        end
         return state.spent, event
     end
     local function markRollback()
@@ -91,13 +125,15 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
     local function resetAfterSuccess()
         state.spent = 0
         state.last = nil
+        state.limit = nil
         state.rollbackPending = false
         save()
     end
     return {
         observe = observe,
         spent = function() return state.spent end,
-        capped = function() return state.spent >= maximum end,
+        limit = function() return state.limit or maximum end,
+        capped = function() return state.spent >= (state.limit or maximum) end,
         markRollback = markRollback,
         resetAfterSuccess = resetAfterSuccess,
         isRollbackPending = function() return state.rollbackPending end,
@@ -136,20 +172,20 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "KIJO v1.0.64: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "KIJO v1.0.65: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[KIJO BOOT v1.0.64] File mulai dijalankan; panel awal dibuat")
+                print("[KIJO BOOT v1.0.65] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[KIJO BOOT v1.0.64] " .. tostring(err)) end
+            if not ok then warn("[KIJO BOOT v1.0.65] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[KIJO BOOT v1.0.64] " .. tostring(errBoot)) end
+    if not okBoot then warn("[KIJO BOOT v1.0.65] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
--- ADD-ON TARGET KEDUA v1.0.64: KIJO -> TIMESKIP OKAZU
+-- ADD-ON TARGET KEDUA v1.0.65: KIJO -> TIMESKIP OKAZU
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
 --  * Pemilihan slot meniru Mamori: Common > aman > Rintaro/Kimiro (terakhir).
@@ -218,21 +254,21 @@ do
                     end
                     kijoDebugButton = button
                     button.Visible = true
-                    button.Text = "OKAZU v1.0.64: " .. kijoLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "OKAZU v1.0.65: " .. kijoLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function kijoStatus(message)
                     kijoLastStatus = tostring(message)
-                    local line = "[OKAZU v1.0.64] " .. kijoLastStatus
+                    local line = "[OKAZU v1.0.65] " .. kijoLastStatus
                     kijoLogs[#kijoLogs + 1] = line
                     if #kijoLogs > 120 then table.remove(kijoLogs, 1) end
                     print(line)
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "OKAZU v1.0.64: " .. kijoLastStatus
+                        kijoDebugButton.Text = "OKAZU v1.0.65: " .. kijoLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
-                -- v1.0.64: deduplikasi sink langsung vs LogService.
+                -- v1.0.65: deduplikasi sink langsung vs LogService.
                 local seenLog = {}
                 local bridgeEnv = (typeof(getgenv) == "function" and getgenv()) or _G
                 bridgeEnv.__VL_DEBUG_SINK = function(message)
@@ -244,7 +280,7 @@ do
                     if #kijoLogs > 350 then table.remove(kijoLogs, 1) end
                     kijoLastStatus = line
                     if kijoDebugButton and kijoDebugButton.Parent then
-                        kijoDebugButton.Text = "v1.0.64: " .. line:sub(1, 170)
+                        kijoDebugButton.Text = "v1.0.65: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -565,7 +601,7 @@ do
                     return nil
                 end
                 local inventoryRareStyleSummary
-                -- v1.0.64: webhook akhir untuk Kijo (fase 1) dan Timeskip Okazu (fase 2).
+                -- v1.0.65: webhook akhir untuk Kijo (fase 1) dan Timeskip Okazu (fase 2).
                 local function notifyFinal(hasKijo, reason)
                     reason = reason or "FINAL"
                     if webhookBusy then return end
@@ -928,7 +964,8 @@ do
                 local kijoLuckyPendingBefore = nil
                 local clearKijoInitialDecision -- ditetapkan di blok komitmen Kijo
                 kijoStatus("Budget Lucky Timeskip Okazu: " .. tostring(kijoBudget.spent())
-                    .. "/30 (tersimpan lintas rejoin); rollback pending="
+                    .. "/" .. tostring(kijoBudget.limit())
+                    .. " (tersimpan lintas rejoin); rollback pending="
                     .. tostring(kijoBudget.isRollbackPending()))
                 local function observeKijoLucky(balance)
                     local before = kijoBudget.spent()
@@ -940,10 +977,11 @@ do
                             clearKijoInitialDecision()
                         end
                         kijoStatus("Rollback Timeskip Okazu terdeteksi: saldo Lucky pulih;"
-                            .. " budget baru 0/30")
+                            .. " budget baru 0/" .. tostring(kijoBudget.limit()))
                     elseif used > before then
                         kijoStatus("Lucky Timeskip Okazu terpakai " .. tostring(used)
-                            .. "/30 | Sisa saldo " .. tostring(balance))
+                            .. "/" .. tostring(kijoBudget.limit())
+                            .. " | Sisa saldo " .. tostring(balance))
                     end
                     if kijoLuckyPendingBefore and type(balance) == "number"
                         and balance < kijoLuckyPendingBefore then
@@ -1656,7 +1694,7 @@ do
                     kijoBudget.markRollback()
                     kijoRollbackInFlight = true
                     kijoStatus((kijoLuckyCapReached()
-                        and ("Batas " .. tostring(MAX_KIJO_LUCKY_SPENT)
+                        and ("Batas " .. tostring(kijoBudget.limit())
                             .. " Lucky Timeskip Okazu tercapai, saldo=" .. tostring(remaining))
                         or "Lucky habis (0)")
                         .. ", Timeskip Okazu belum ada: ROLLBACK seperti Kijo")
@@ -1777,7 +1815,15 @@ do
                         task.wait(0.3)
                     end
                     if not playerA.Parent then return end
-                    observeKijoLucky(readSignal(ctrl and ctrl.LuckySpins))
+                    local saldoTsoAwal = readSignal(ctrl and ctrl.LuckySpins)
+                    local _, batasTsoEvent = kijoBudget.observe(saldoTsoAwal)
+                    if batasTsoEvent == "LIMIT_INIT" or batasTsoEvent == "INIT"
+                        or batasTsoEvent == "RESET_AFTER_ROLLBACK" then
+                        kijoStatus("Jatah TSO: " .. tostring(kijoBudget.limit())
+                            .. " dari saldo " .. tostring(saldoTsoAwal)
+                            .. " (seluruh sisa Kijo jika <=29, maksimal 30 lainnya)")
+                    end
+                    observeKijoLucky(saldoTsoAwal)
                     local kijoBefore = hasTimeskipOkazu()
                     if kijoBefore == nil then
                         kijoStatus("Inventory Timeskip Okazu belum siap; tunggu sinkronisasi")
@@ -1834,7 +1880,8 @@ do
                     observeKijoLucky(readSignal(ctrl.LuckySpins))
                     if dupOK == false then
                         if dupWhy == "LUCKY_CAP" or kijoLuckyCapReached() then
-                            kijoRollbackOrNoSlot("Batas 30 Lucky Timeskip Okazu saat pembersihan duplikat")
+                            kijoRollbackOrNoSlot("Batas " .. tostring(kijoBudget.limit())
+                                .. " Lucky Timeskip Okazu saat pembersihan duplikat")
                             return
                         end
                         kijoStatus("Duplikat Kijo belum tuntas: " .. tostring(dupWhy))
@@ -1862,7 +1909,8 @@ do
                     end
                     if lucky <= 0 or kijoLuckyCapReached() then
                         kijoStatus(kijoLuckyCapReached()
-                            and "Batas 30 Lucky Timeskip Okazu tercapai: ROLLBACK"
+                            and ("Batas " .. tostring(kijoBudget.limit())
+                                .. " Lucky Timeskip Okazu tercapai: ROLLBACK")
                             or "Lucky 0, pencarian Timeskip Okazu AKTIF: ROLLBACK seperti Kijo")
                         kijoRollbackOrNoSlot()
                         return
@@ -1894,7 +1942,8 @@ do
                         local currentBudgetLucky = readSignal(ctrl.LuckySpins)
                         observeKijoLucky(currentBudgetLucky)
                         if kijoLuckyCapReached() then
-                            kijoRollbackOrNoSlot("30 Lucky Timeskip Okazu sudah digunakan")
+                            kijoRollbackOrNoSlot(tostring(kijoBudget.limit())
+                                .. " Lucky Timeskip Okazu sudah digunakan")
                             return
                         end
                         if kijoLuckyPendingBefore then
@@ -1925,7 +1974,8 @@ do
                                 elseif currentLucky <= 0 or kijoLuckyCapReached() then
                                     -- Sama seperti Mamori: tunggu 1 detik, cek, baru rollback.
                                     kijoStatus(kijoLuckyCapReached()
-                                        and "30 Lucky Timeskip Okazu digunakan, cek Timeskip Okazu sebelum rollback"
+                                        and (tostring(kijoBudget.limit())
+                                            .. " Lucky Timeskip Okazu digunakan, cek Timeskip Okazu sebelum rollback")
                                         or "Lucky habis, cek Timeskip Okazu")
                                     task.wait(1)
                                     kijoRollbackOrNoSlot()
@@ -1988,7 +2038,7 @@ do
                                             end
                                             if kijoLuckyPendingBefore then
                                                 kijoStatus("Saldo Lucky belum berubah setelah roll Timeskip Okazu;"
-                                                    .. " tahan spin agar batas 30 tidak terlewati")
+                                                    .. " tahan spin agar jatah tidak terlewati")
                                                 return
                                             end
                                             task.wait(0.55) -- jeda tetap
@@ -2100,7 +2150,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[KIJO + TIMESKIP OKAZU v1.0.64] Percobaan "
+                warn("[KIJO + TIMESKIP OKAZU v1.0.65] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2112,14 +2162,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[OKAZU v1.0.64] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[OKAZU v1.0.65] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[OKAZU v1.0.64] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[OKAZU v1.0.65] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -2402,7 +2452,7 @@ if stage == "LEVEL" then
     else
         -- Jalankan leveling asli yang pengguna kirim dengan satu modifikasi handoff.
         ENV.__VL_LEVEL_DONE = false
-        -- v1.0.64: observasi dini DI LUAR engine asli v1.0.36;
+        -- v1.0.65: observasi dini DI LUAR engine asli v1.0.36;
         -- tidak membuat progress bar palsu; klik tengah, tutorial, Return dipertahankan.
         -- Team join dan worker aksi dilepas dari satu gate konfirmasi.
         __mamoriTrace("LEVEL HEALTH | memulai pemeriksaan engine + AUTO LEVEL UI")
@@ -5659,7 +5709,7 @@ if stage == "REDEEM" then
 end
 
 if stage == "ROLL" then
-    -- v1.0.64: satu worker Mamori per JobId, termasuk ketika AutoExecute
+    -- v1.0.65: satu worker Mamori per JobId, termasuk ketika AutoExecute
     -- memuat berkas dua kali pada sesi yang sama.
     local mamoriSessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
     local mamoriSessionKey = "__VL_MAMORI_ROLL_WORKER_159_" .. tostring(Player.UserId)
@@ -5775,7 +5825,7 @@ do
                     end
                 end
             end
-            -- Tambahan v1.0.64: gunakan DisplayName dari daftar aktif bila ID
+            -- Tambahan v1.0.65: gunakan DisplayName dari daftar aktif bila ID
             -- referensi berbeda dari ID internal game.
             local known = {}
             for category, examples in pairs(referenceStyles) do
@@ -6472,17 +6522,23 @@ local function mamoriWatch(message)
     -- Jangan kirim langsung lagi ke sink yang sama (menjadi duplikat).
 end
 print("[AutoSpin] Budget Lucky Kijo: " .. tostring(mamoriBudget.spent())
-    .. "/30 (tersimpan lintas rejoin); rollback pending="
+    .. "/" .. tostring(mamoriBudget.limit())
+    .. " (tersimpan lintas rejoin); rollback pending="
     .. tostring(mamoriBudget.isRollbackPending()))
 local function observeKijoLucky(balance)
     local before = mamoriBudget.spent()
     local used, event = mamoriBudget.observe(balance)
+    if event == "LIMIT_INIT" or event == "INIT"
+        or event == "RESET_AFTER_ROLLBACK" then
+        mamoriWatch("Jatah Kijo aktif " .. tostring(mamoriBudget.limit())
+            .. "/30 (Lucky saat mulai=" .. tostring(balance) .. ")")
+    end
     if event == "RESET_AFTER_ROLLBACK" then
         print("[AutoSpin] Rollback Kijo terdeteksi: saldo Lucky pulih;"
-            .. " budget baru 0/30")
+            .. " budget baru 0/" .. tostring(mamoriBudget.limit()))
     elseif used > before then
         print("[AutoSpin] Lucky Kijo terpakai:", used,
-            "/30", "saldo:", balance)
+            "/" .. tostring(mamoriBudget.limit()), "saldo:", balance)
     end
     if mamoriLuckyPendingBefore and type(balance) == "number"
         and balance < mamoriLuckyPendingBefore then
@@ -7023,24 +7079,27 @@ task.spawn(function()
             break
         end
 
-        local spins, lucky = 0, 0
+        local spins, lucky = nil, nil
 
         pcall(function()
-            spins = StyleCtrl.Spins
-                and StyleCtrl.Spins:get()
-                or 0
+            spins = StyleCtrl.Spins and StyleCtrl.Spins:get()
         end)
 
         pcall(function()
-            lucky = StyleCtrl.LuckySpins
-                and StyleCtrl.LuckySpins:get()
-                or 0
+            lucky = StyleCtrl.LuckySpins and StyleCtrl.LuckySpins:get()
         end)
+        -- Saldo nil berarti data belum siap, bukan Lucky 0.
+        -- Jangan mengurangi budget berdasarkan snapshot sementara.
+        if type(spins) ~= "number" or type(lucky) ~= "number" then
+            task.wait(0.5)
+            continue
+        end
         observeKijoLucky(lucky)
 
         if stopKijoIfNoSafeSlot() then break end
         if mamoriBudget.capped() then
-            print("[AutoSpin] BATAS 30 Lucky Kijo tercapai -> rollback")
+            print("[AutoSpin] BATAS " .. tostring(mamoriBudget.limit())
+                .. " Lucky Kijo tercapai -> rollback")
             saveFlag()
             doRollback()
             running = false
@@ -7188,7 +7247,8 @@ task.spawn(function()
                 end
 
                 print(mamoriBudget.capped()
-                    and "[AutoSpin] Batas 30 Lucky tercapai, memeriksa Kijo"
+                    and ("[AutoSpin] Batas " .. tostring(mamoriBudget.limit())
+                        .. " Lucky tercapai, memeriksa Kijo")
                     or "[AutoSpin] Lucky habis, memeriksa Kijo")
 
                 -- TUNGGU UPDATE DATA
