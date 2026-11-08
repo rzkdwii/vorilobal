@@ -5348,7 +5348,7 @@ end
 
 -- Jika slot terakhir menjadi Secret/Ultra/Evo, STOP tanpa rollback batas 30.
 local function stopFirstTargetIfNoSafeSlot()
-    local checker = cacheEnv["__VL_FIRST_TIMESKIP_OKAZU_ALL_PROTECTED_" .. uid]
+    local checker = cacheEnv["__VL_FIRST_TIMESKIP_OKAZU_ALL_PROTECTED_" .. tostring(Player.UserId)]
     if type(checker) ~= "function" then return false end
     local ok, first = pcall(checker)
     if not ok or type(first) ~= "string" then return false end
@@ -5726,8 +5726,10 @@ if hasFirstTargetStyle() then
 end
 
 -- MAIN LOOP
+-- v1.0.66 FIX: tangkap exception di thread spin agar tidak berhenti diam-diam.
 task.spawn(function()
-
+    mamoriWatch("WORKER FASE 1 DIMULAI | memeriksa target, slot, dan saldo")
+    local okWorker, errWorker = xpcall(function()
     while running do
 
         -- CEK TARGET SETIAP LOOP
@@ -5926,6 +5928,22 @@ task.spawn(function()
         end
 
         task.wait(0.55)
+    end
+    end, function(err)
+        if debug and type(debug.traceback) == "function" then
+            return debug.traceback(tostring(err), 2)
+        end
+        return tostring(err)
+    end)
+    if not okWorker then
+        warn("[AutoSpin] WORKER FASE 1 ERROR: " .. tostring(errWorker))
+        mamoriWatch("WORKER FASE 1 ERROR: " .. tostring(errWorker))
+        -- Gagal sebelum spin bukan alasan mengunci sesi selamanya.
+        if mamoriSessionEnv[mamoriSessionKey] == game.JobId then
+            mamoriSessionEnv[mamoriSessionKey] = nil
+        end
+    else
+        mamoriWatch("WORKER FASE 1 SELESAI; running=" .. tostring(running))
     end
 end)
 
