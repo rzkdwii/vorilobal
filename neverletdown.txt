@@ -1,5 +1,6 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.67 | STYLE 1 Timeskip Okazu (Pity TimeskipToru4) -> STYLE 2 The Twins (Pity Twin1_5) | leveling & team nonblocking, tutorial retained
+-- VERSION: v1.0.68 | STYLE 1 Timeskip Okazu (Pity TimeskipToru4) -> STYLE 2 The Twins (Pity Twin1_5) | leveling & team nonblocking, tutorial retained
+-- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Timeskip Okazu + The Twins dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
@@ -152,10 +153,10 @@ do
                 local me = ps.LocalPlayer or ps.PlayerAdded:Wait()
                 local gui = me:WaitForChild("PlayerGui", 40)
                 if not gui then error("PlayerGui belum dibuat setelah 40 detik") end
-                local screen = gui:FindFirstChild("TwinsLiveDebugV167")
+                local screen = gui:FindFirstChild("TwinsLiveDebugV168")
                 if not screen then
                     screen = Instance.new("ScreenGui")
-                    screen.Name = "TwinsLiveDebugV167"
+                    screen.Name = "TwinsLiveDebugV168"
                     screen.ResetOnSpawn = false
                     screen.IgnoreGuiInset = true
                     screen.DisplayOrder = 10002
@@ -173,20 +174,20 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.67: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.68: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.67] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.68] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.67] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.68] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.67] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.68] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
--- ADD-ON TARGET KEDUA v1.0.67: TIMESKIP OKAZU -> THE TWINS
+-- ADD-ON TARGET KEDUA v1.0.68: TIMESKIP OKAZU -> THE TWINS
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
 --  * Pemilihan slot meniru Mamori: Common > aman > Rintaro/Kimiro (terakhir).
@@ -216,10 +217,10 @@ do
                 local function attachTwinsDebug()
                     local latestGui = playerA:FindFirstChild("PlayerGui")
                     if not latestGui then return false end
-                    local gui = latestGui:FindFirstChild("TwinsLiveDebugV167")
+                    local gui = latestGui:FindFirstChild("TwinsLiveDebugV168")
                     if not gui then
                         gui = Instance.new("ScreenGui")
-                        gui.Name = "TwinsLiveDebugV167"
+                        gui.Name = "TwinsLiveDebugV168"
                         gui.ResetOnSpawn = false
                         gui.DisplayOrder = 10002
                         gui.IgnoreGuiInset = true
@@ -227,7 +228,7 @@ do
                     end
                     twinsDebugGui = gui
                     local button = gui:FindFirstChild("CopyDebug")
-                    if button and not button:GetAttribute("TwinsCopyReadyV167") then
+                    if button and not button:GetAttribute("TwinsCopyReadyV168") then
                         button:Destroy()
                         button = nil
                     end
@@ -244,7 +245,7 @@ do
                         button.TextWrapped = true
                         button.ZIndex = 50
                         button.Parent = gui
-                        button:SetAttribute("TwinsCopyReadyV167", true)
+                        button:SetAttribute("TwinsCopyReadyV168", true)
                         Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
                         button.Activated:Connect(function()
                             if typeof(setclipboard) == "function" then
@@ -255,17 +256,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.67: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.68: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.67] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.68] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.67: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.68: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -281,7 +282,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.67: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.68: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -312,7 +313,7 @@ do
                         end
                     end
                 end)
-                local POPUP_NAME = "TwinsCompactPopupV167"
+                local POPUP_NAME = "TwinsCompactPopupV168"
                 local STAGE_FILE = "VL_Final_Stage_" .. tostring(playerA.UserId) .. ".txt"
                 local STAGE_KEY = "VL_Final_Stage_" .. tostring(playerA.UserId)
                 local SAVE_FILE = "VL_TimeskipOkazu_Ability_Origin_" .. tostring(playerA.UserId) .. ".txt"
@@ -606,7 +607,7 @@ do
                     return nil
                 end
                 local inventoryRareStyleSummary
-                local showPopup -- dideklarasikan di sini agar bisa dipanggil dari notifyFinal
+                local showPopup
                 -- v1.0.66: webhook akhir untuk Timeskip Okazu (fase 1) dan The Twins (fase 2).
                 local function notifyFinal(hasTwins, reason)
                     reason = reason or "FINAL"
@@ -680,8 +681,6 @@ do
                                 pcall(writefile, file, "sent|" .. tostring(os.time()))
                                 twinsStatus("Webhook final terkirim: " .. statusLabel)
                                 delivered = true
-                                -- Popup sekarang hanya muncul setelah webhook berhasil terkirim.
-                                pcall(showPopup, statusLabel)
                                 break
                             end
                             warn("[WEBHOOK FINAL] Percobaan " .. tostring(attempt)
@@ -700,9 +699,8 @@ do
                 env["__VL_FINAL_NOTIFY_" .. tostring(playerA.UserId)] = notifyFinal
 
                 showPopup = function(popupText)
-                    if hasFirstTarget() == true then
-                        publishHistory("STYLE", "Timeskip Okazu", true)
-                    end
+                    publishHistory("STYLE", "Timeskip Okazu", true)
+                    publishHistory("STYLE", "The Twins", true)
                     local ownedSlots = abilityA and abilityA.Abilities and readSignal(abilityA.Abilities)
                     if type(ownedSlots) == "table" and type(rarityMap) == "table" then
                         for _, abilityId in pairs(ownedSlots) do
@@ -767,7 +765,7 @@ do
                     message.BackgroundTransparency = 1
                     message.Size = UDim2.fromOffset(284, 58)
                     message.Position = UDim2.fromOffset(44, 10)
-                    message.Text = "Webhook terkirim\n" .. tostring(popupText or "Sudah Mendapatkan Target")
+                    message.Text = "Sudah Mendapatkan Target\n" .. tostring(popupText or "Timeskip Okazu + The Twins")
                     message.TextWrapped = true
                     message.TextYAlignment = Enum.TextYAlignment.Top
                     message.TextXAlignment = Enum.TextXAlignment.Left
@@ -1770,6 +1768,8 @@ do
                     finishToZero()
                     notifyFinal(true)
                     twinsFinished = true
+                    -- v1.0.68: popup hanya bila Timeskip Okazu + The Twins sudah dimiliki.
+                    pcall(showPopup)
                 end
 
                 -- Tidak ada slot aman: selesai dengan Timeskip Okazu saja, TANPA spin,
@@ -2078,6 +2078,18 @@ do
                 end
 
                 if game.PlaceId == 86789627188240 then return end
+                -- v1.0.68: popup muncul sekali per sesi saat akun memiliki
+                -- Timeskip Okazu + The Twins (juga setelah rejoin). Tidak terkait webhook.
+                task.spawn(function()
+                    while playerA.Parent do
+                        local okTwins, twinsOwned = pcall(hasTheTwins)
+                        if okTwins and twinsOwned == true and hasFirstTarget() == true then
+                            pcall(showPopup)
+                            return
+                        end
+                        task.wait(1)
+                    end
+                end)
                 local initialFirstTarget = nil
                 local secretAbilityMonitorStarted = false
                 local lastGateText, lastGateAt = nil, -100
@@ -2142,26 +2154,26 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[TIMESKIP OKAZU + THE TWINS v1.0.67] Percobaan "
+                warn("[TIMESKIP OKAZU + THE TWINS v1.0.68] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
                     local gui = plr and plr:FindFirstChild("PlayerGui")
-                    local panel = gui and gui:FindFirstChild("TwinsLiveDebugV167")
+                    local panel = gui and gui:FindFirstChild("TwinsLiveDebugV168")
                     local button = panel and panel:FindFirstChild("CopyDebug")
                     if button then button.Text = "TWINS ERROR inisialisasi: " .. tostring(errMain):sub(1, 150) end
                 end)
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.67] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.68] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.67] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.68] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
