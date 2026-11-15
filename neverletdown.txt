@@ -1,6 +1,6 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- VERSION: v1.0.69 | STYLE 1 The Twins (Pity Twin1_5) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
--- v1.0.69: popup "Sudah Mendapatkan Target" hanya muncul bila The Twins + Sanju dimiliki; tidak lagi terkait webhook.
+-- VERSION: v1.0.70 | STYLE 1 The Twins (Pity Twin1_5) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
+-- v1.0.70: popup "Sudah Mendapatkan Target" hanya muncul bila The Twins + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 -- ISI URL WEBHOOK DISCORD BARU DI BAWAH (jangan dibagikan ke orang lain).
@@ -174,20 +174,20 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.69: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.70: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.69] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.70] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.69] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.70] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.69] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.70] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
--- ADD-ON TARGET KEDUA v1.0.69: The Twins -> Sanju
+-- ADD-ON TARGET KEDUA v1.0.70: The Twins -> Sanju
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
 --  * Pemilihan slot meniru Mamori: Common > aman > Kimiro (terakhir).
@@ -256,17 +256,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.69: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.70: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.69] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.70] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.69: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.70: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -282,7 +282,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.69: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.70: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -1768,7 +1768,7 @@ do
                     finishToZero()
                     notifyFinal(true)
                     twinsFinished = true
-                    -- v1.0.69: popup hanya bila The Twins + Sanju sudah dimiliki.
+                    -- v1.0.70: popup hanya bila The Twins + Sanju sudah dimiliki.
                     pcall(showPopup)
                 end
 
@@ -2078,7 +2078,7 @@ do
                 end
 
                 if game.PlaceId == 86789627188240 then return end
-                -- v1.0.69: popup muncul sekali per sesi saat akun memiliki
+                -- v1.0.70: popup muncul sekali per sesi saat akun memiliki
                 -- The Twins + Sanju (juga setelah rejoin). Tidak terkait webhook.
                 task.spawn(function()
                     while playerA.Parent do
@@ -2154,7 +2154,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[The Twins + Sanju v1.0.69] Percobaan "
+                warn("[The Twins + Sanju v1.0.70] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2166,14 +2166,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.69] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.70] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.69] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.70] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
