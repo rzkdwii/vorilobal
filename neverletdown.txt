@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.71: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.72-SANJU-SLOT-LOCK: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -14,7 +14,7 @@ local function __vlReadCell(cell)
     return nil
 end
 
--- VERSION: v1.0.71-CELL-FIX | STYLE 1 The Twins (Pity Twin1_5) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
+-- VERSION: v1.0.72-SANJU-SLOT-LOCK-CELL-FIX | STYLE 1 The Twins (Pity Twin1_5) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila The Twins + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -189,16 +189,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.71: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.72-SANJU-SLOT-LOCK: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.71] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.72-SANJU-SLOT-LOCK] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.71] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.72-SANJU-SLOT-LOCK] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.71] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.72-SANJU-SLOT-LOCK] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -271,17 +271,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.71: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.72-SANJU-SLOT-LOCK: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.71] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.72-SANJU-SLOT-LOCK] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.71: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.72-SANJU-SLOT-LOCK: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -297,7 +297,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.71: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.72-SANJU-SLOT-LOCK: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -1455,10 +1455,10 @@ do
                         if type(id) ~= "string" or id == "" then
                             return false, "slot khusus belum tersinkron"
                         end
-                        if not initialSlotRank(id) then
-                            print("[TWINS] Slot " .. tostring(picked) .. " kini dilindungi: " .. tostring(id))
-                            picked, twinsDedicatedSlot = nil, nil
-                        end
+                        -- Slot Sanju sudah dipilih aman SEBELUM spin.
+                        -- Hasil sementara (termasuk The Twins/Evo/Ultra) tidak
+                        -- boleh mencabut kunci slot ataupun memindahkan spin.
+
                     end
                     if not picked then
                         local bestRank = math.huge
@@ -1490,7 +1490,9 @@ do
                         if not switched then return false, "SelectSlot belum tersinkron" end
                     end
                     local id = slotValue(readSignal(teamA.Styles), picked)
-                    if not initialSlotRank(id) then return false, "slot baru tidak aman" end
+                    if twinsDedicatedSlot == nil and not initialSlotRank(id) then
+                        return false, "slot baru tidak aman"
+                    end
                     twinsDedicatedSlot = picked
                     return true
                 end
@@ -1814,8 +1816,12 @@ do
                         twinsDone()
                         return
                     end
-                    local available, detail = twinsSlotAvailability()
-                    if available == false and stopTwinsNoSlot(detail) then return end
+                    -- Jika slot Sanju sudah terkunci, hasil roll terakhir bukan
+                    -- alasan NO_SLOT; langsung jalankan rollback lama.
+                    if twinsDedicatedSlot == nil then
+                        local available, detail = twinsSlotAvailability()
+                        if available == false and stopTwinsNoSlot(detail) then return end
+                    end
                     if reason then twinsStatus(reason) end
                     rollbackTwinsOnce()
                 end
@@ -1862,7 +1868,7 @@ do
                         return
                     end
                     -- Cek sebelum komit Lucky, pemilihan Pity, rejoin, atau rollback.
-                    if twinsBefore == false then
+                    if twinsBefore == false and twinsDedicatedSlot == nil then
                         local available, detail = twinsSlotAvailability()
                         if available == false then
                             if stopTwinsNoSlot(detail) then return end
@@ -1908,7 +1914,10 @@ do
                         twinsStatus("Menunggu pemilihan Secret Pity Sanju / rejoin")
                         return
                     end
-                    local dupOK, dupWhy = clearAllDuplicates(ctrl, rollRF, selectRF)
+                    local dupOK, dupWhy = true, nil
+                    if twinsDedicatedSlot == nil then
+                        dupOK, dupWhy = clearAllDuplicates(ctrl, rollRF, selectRF)
+                    end
                     observeTwinsLucky(readSignal(ctrl.LuckySpins))
                     if dupOK == false then
                         if dupWhy == "LUCKY_CAP" or twinsLuckyCapReached() then
@@ -1982,15 +1991,9 @@ do
                             twinsStatus("Menunggu saldo Lucky Sanju terkonfirmasi sebelum spin lain")
                             return
                         end
-                        local dupOK2, dupWhy2 = clearAllDuplicates(ctrl, rollRF, selectRF)
-                        if dupOK2 == false then
-                            if dupWhy2 == "LUCKY_CAP" or twinsLuckyCapReached() then
-                                twinsRollbackOrNoSlot("Batas Lucky Sanju saat pembersihan duplikat")
-                                return
-                            end
-                            twinsStatus("Tunda: duplikat The Twins belum tuntas: " .. tostring(dupWhy2))
-                            task.wait(1)
-                        else
+                        -- Selama spin Sanju, JANGAN bersihkan duplikat The Twins.
+                        -- Semua hasil sementara tetap di slot terkunci.
+                        do
                             local twins = hasSanju()
                             if twins == true then
                                 twinsStatus("Sanju ditemukan! STOP")
@@ -2015,10 +2018,14 @@ do
                                 else
                                     local okSlot, why = chooseSafeStyleSlot(selectRF)
                                     if not okSlot then
-                                        local available, detail = twinsSlotAvailability()
-                                        if available == false then
-                                            if stopTwinsNoSlot(detail) then return end
-                                            return -- data berubah; worker recovery akan mencoba lagi
+                                        -- Pemeriksaan NO_SLOT hanya berlaku saat pemilihan
+                                        -- awal; slot yang terkunci tidak dinilai ulang.
+                                        if twinsDedicatedSlot == nil then
+                                            local available, detail = twinsSlotAvailability()
+                                            if available == false then
+                                                if stopTwinsNoSlot(detail) then return end
+                                                return
+                                            end
                                         end
                                         slotFails += 1
                                         twinsStatus("Slot belum aman (" .. slotFails .. "/10): " .. tostring(why))
@@ -2185,14 +2192,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.71] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.72-SANJU-SLOT-LOCK] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.71] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.72-SANJU-SLOT-LOCK] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
