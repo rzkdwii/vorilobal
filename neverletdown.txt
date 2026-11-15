@@ -2218,7 +2218,7 @@ local ENV = getgenv()
 local FILE = "VL_Final_Stage_" .. tostring(Player.UserId) .. ".txt"
 local KEY = "VL_Final_Stage_" .. tostring(Player.UserId)
 local REGULAR_PLACE = game.PlaceId -- Server hop ke PlaceId game yang sedang dimainkan; bukan ID tetap
-local CODES = {"UPDATE_93", "CURSED", "TOURNAMENT", "UPDATE_95", "YEEHAW", "TWINS_STANDOFF"}
+local CODES = {"UPDATE_96", "RIKU_REWORK", "NEW_CHAT_BUBBLES"}
 
 local function loadStage()
     local raw
