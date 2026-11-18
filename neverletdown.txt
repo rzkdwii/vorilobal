@@ -3559,40 +3559,38 @@ local function tutorialVisible(obj)
 end
 
 local function tutorialActivate(button)
-    if not button then
-        return false
-    end
-
+    if not button or not button:IsA("GuiButton") then return false end
     local activated = false
-
     if typeof(getconnections) == "function" then
-        local okConnections, connections = pcall(function()
-            return getconnections(button.Activated)
-        end)
-
-        if okConnections and type(connections) == "table" then
-            for _, connection in ipairs(connections) do
-                local okFire = pcall(function()
-                    if type(connection.Fire) == "function" then
-                        connection:Fire()
-                    elseif type(connection.Function) == "function" then
-                        connection.Function()
+        for _, signalName in ipairs({"Activated", "MouseButton1Click"}) do
+            local okSignal, signal = pcall(function() return button[signalName] end)
+            if okSignal and signal then
+                local okConnections, connections = pcall(getconnections, signal)
+                if okConnections and type(connections) == "table" then
+                    for _, connection in ipairs(connections) do
+                        local okFire = pcall(function()
+                            if type(connection.Fire) == "function" then
+                                connection:Fire()
+                            elseif type(connection.Function) == "function" then
+                                connection.Function()
+                            else
+                                error("connection tidak mendukung Fire/Function")
+                            end
+                        end)
+                        if okFire then activated = true end
                     end
-                end)
-
-                if okFire then
-                    activated = true
                 end
             end
         end
     end
-
     if not activated and typeof(firesignal) == "function" then
-        activated = pcall(function()
-            firesignal(button.Activated)
-        end)
+        for _, signalName in ipairs({"Activated", "MouseButton1Click"}) do
+            local okSignal, signal = pcall(function() return button[signalName] end)
+            if okSignal and signal and pcall(firesignal, signal) then
+                activated = true
+            end
+        end
     end
-
     return activated
 end
 
@@ -3616,16 +3614,25 @@ local function pressTutorialButton(button)
     if not button or not button:IsA("GuiButton") or not tutorialVisible(button) then
         return false
     end
-    if tutorialActivate(button) then return true end
+    -- Klik fisik lebih dahulu agar handler input Roblox (termasuk MouseButton1Down)
+    -- menerima event; direct signal hanya fallback.
     local pos, size = button.AbsolutePosition, button.AbsoluteSize
-    if size.X <= 0 or size.Y <= 0 then return false end
-    local vim = game:GetService("VirtualInputManager")
-    return pcall(function()
-        local x, y = pos.X + size.X / 2, pos.Y + size.Y / 2
-        vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
-        task.wait(0.10)
-        vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
-    end)
+    local clickOK = false
+    if size.X > 0 and size.Y > 0 then
+        local okVim, vim = pcall(function() return game:GetService("VirtualInputManager") end)
+        if okVim and vim then
+            clickOK = pcall(function()
+                local x, y = pos.X + size.X / 2, pos.Y + size.Y / 2
+                vim:SendMouseMoveEvent(x, y, game)
+                task.wait(0.06)
+                vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
+                task.wait(0.12)
+                vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
+            end)
+        end
+    end
+    if clickOK then return true end
+    return tutorialActivate(button)
 end
 
 local function tutorialGameGui()
@@ -3639,22 +3646,13 @@ end
 
 local function tutorialMainSkip()
     local gameGui = tutorialGameGui()
-    if not gameGui then
-        return nil
-    end
+    if not gameGui then return nil end
 
-    local mainButton = gameGui:FindFirstChild("TutorialSkipBtn")
-    local coachDialogue = gameGui:FindFirstChild("CoachDialogue")
-    local coachButton = coachDialogue and coachDialogue:FindFirstChild("SkipTutorial")
-
-    if tutorialVisible(mainButton) then
-        return mainButton
-    end
-
-    if tutorialVisible(coachButton) then
-        return coachButton
-    end
-
+    -- Prioritaskan path asli. Pencarian rekursif hanya cadangan jika UI dipindahkan.
+    local mainButton = gameGui:FindFirstChild("TutorialSkipBtn", true)
+    local coachButton = gameGui:FindFirstChild("SkipTutorial", true)
+    if tutorialVisible(mainButton) and mainButton:IsA("GuiButton") then return mainButton end
+    if tutorialVisible(coachButton) and coachButton:IsA("GuiButton") then return coachButton end
     return nil
 end
 
@@ -3666,12 +3664,137 @@ local function tutorialPromptOptions()
     local interface = playerGui and playerGui:FindFirstChild("Interface")
     local persistent = interface and interface:FindFirstChild("Persistent")
     local prompt = persistent and persistent:FindFirstChild("Prompt")
+
+    -- Jika struktur Prompt berubah, temukan popup dari kalimat konfirmasi yang
+    -- terlihat, bukan mengasumsikan Option1/Option2 selalu tombol SKIP.
+    local function labelText(node)
+        if not (node:IsA("TextLabel") or node:IsA("TextButton")) then return nil end
+        return tostring(node.Text or ""):gsub("<[^>]+>", "")
+            :gsub("%s+", " "):lower()
+    end
+    local function isThisConfirm(root)
+        if not root or not tutorialVisible(root) then return false end
+        for _, desc in ipairs(root:GetDescendants()) do
+            local value = labelText(desc)
+            if value and value:find("head straight", 1, true)
+                and value:find("real match", 1, true) and tutorialVisible(desc) then
+                return true
+            end
+        end
+        return false
+    end
+
+    if not isThisConfirm(prompt) and playerGui then
+        for _, node in ipairs(playerGui:GetDescendants()) do
+            local value = labelText(node)
+            if value and value:find("head straight", 1, true)
+                and value:find("real match", 1, true) and tutorialVisible(node) then
+                local ancestor = node.Parent
+                while ancestor and ancestor ~= playerGui do
+                    if isThisConfirm(ancestor) then
+                        local hasSkip, hasKeep = false, false
+                        for _, item in ipairs(ancestor:GetDescendants()) do
+                            local label = labelText(item)
+                            if label and tutorialVisible(item) then
+                                local clean = label:match("^%s*(.-)%s*$")
+                                if clean == "skip" then hasSkip = true end
+                                if clean == "keep playing" then hasKeep = true end
+                            end
+                        end
+                        if hasSkip and hasKeep then
+                            prompt = ancestor
+                            break
+                        end
+                    end
+                    ancestor = ancestor.Parent
+                end
+                if prompt and isThisConfirm(prompt) then break end
+            end
+        end
+    end
+
+    -- Jangan keliru dengan Prompt generik ketika belum menampilkan
+    -- konfirmasi Skip Tutorial.
+    if prompt and not isThisConfirm(prompt) then
+        local skipText, keepText = false, false
+        for _, desc in ipairs(prompt:GetDescendants()) do
+            local label = labelText(desc)
+            if label and tutorialVisible(desc) then
+                local clean = label:match("^%s*(.-)%s*$")
+                if clean == "skip" then skipText = true end
+                if clean == "keep playing" then keepText = true end
+            end
+        end
+        if not (skipText and keepText) then prompt = nil end
+    end
+
     local bgFrame = prompt and prompt:FindFirstChild("BGFrame")
     local container = bgFrame and bgFrame:FindFirstChild("Container")
-
     return container and container:FindFirstChild("Option1") or nil,
         container and container:FindFirstChild("Option2") or nil,
         prompt
+end
+
+-- Konfirmasi tutorial adalah popup tersendiri: tombol SKIP di kiri,
+-- bukan KEEP PLAYING. Kenali melalui teks yang benar-benar terlihat.
+local function tutorialSkipConfirmTarget(prompt, option1, option2)
+    if not prompt or not tutorialVisible(prompt) then return nil end
+
+    local function isSkipLabel(item)
+        if not (item:IsA("TextLabel") or item:IsA("TextButton")) then return false end
+        local value = tostring(item.Text or "")
+            :gsub("<[^>]+>", "")
+            :gsub("%s+", " ")
+            :match("^%s*(.-)%s*$"):lower()
+        return value == "skip"
+    end
+
+    -- Cari dari Option1/Option2 dahulu; posisi opsi tidak diasumsikan.
+    local regions = {}
+    if option1 then regions[#regions + 1] = option1 end
+    if option2 then regions[#regions + 1] = option2 end
+    regions[#regions + 1] = prompt
+    for _, region in ipairs(regions) do
+        if region then
+            local nodes = {region}
+            for _, node in ipairs(region:GetDescendants()) do
+                nodes[#nodes + 1] = node
+            end
+            for _, node in ipairs(nodes) do
+                if isSkipLabel(node) and tutorialVisible(node) then
+                    local ancestor = node
+                    while ancestor and ancestor ~= prompt do
+                        if ancestor:IsA("GuiButton") and tutorialVisible(ancestor) then
+                            return ancestor
+                        end
+                        ancestor = ancestor.Parent
+                    end
+                    -- Teks SKIP di dalam Frame (bukan GuiButton): klik koordinat teks.
+                    return node
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function pressTutorialConfirmTarget(target)
+    if not target or not tutorialVisible(target) then return false end
+    if target:IsA("GuiButton") then return pressTutorialButton(target) end
+    if not target:IsA("GuiObject") then return false end
+
+    local pos, size = target.AbsolutePosition, target.AbsoluteSize
+    if size.X <= 0 or size.Y <= 0 then return false end
+    local okVim, vim = pcall(function() return game:GetService("VirtualInputManager") end)
+    if not okVim or not vim then return false end
+    return pcall(function()
+        local x, y = pos.X + size.X / 2, pos.Y + size.Y / 2
+        vim:SendMouseMoveEvent(x, y, game)
+        task.wait(0.06)
+        vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
+        task.wait(0.12)
+        vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
+    end)
 end
 
 local function tutorialModeDetected()
@@ -3766,10 +3889,44 @@ local function waitForTutorialEnd(timeoutSeconds)
     return false
 end
 
+-- Jika popup "Head straight to a real match?" sudah tampil,
+-- langsung tekan SKIP, jangan mengklik tutorial utama / KEEP PLAYING lagi.
+local function tutorialConfirmSkipIfShown()
+    local option1, option2, prompt = tutorialPromptOptions()
+    if not prompt or not tutorialVisible(prompt) then return false, false end
+    local target = tutorialSkipConfirmTarget(prompt, option1, option2)
+    if not target then
+        warn("[TUTORIAL CONFIRM] Popup terlihat, tetapi teks SKIP belum ditemukan; "
+            .. "Option1=" .. tostring(option1 ~= nil)
+            .. " | Option2=" .. tostring(option2 ~= nil))
+        return true, false
+    end
+
+    local sent = pressTutorialConfirmTarget(target)
+    warn("[TUTORIAL CONFIRM] SKIP target=" .. target:GetFullName()
+        .. " | inputSent=" .. tostring(sent))
+    if sent and waitForTutorialEnd(3) then
+        warn("[TUTORIAL CONFIRM] Tutorial selesai")
+        return true, true
+    end
+    -- Event input bisa terkirim tanpa benar-benar mengaktifkan handler.
+    -- Fallback hanya tombol SKIP yang telah diidentifikasi, bukan KEEP PLAYING.
+    if target:IsA("GuiButton") then
+        local fallback = tutorialActivate(target)
+        warn("[TUTORIAL CONFIRM] SKIP fallbackEvent=" .. tostring(fallback))
+        if fallback and waitForTutorialEnd(2) then
+            warn("[TUTORIAL CONFIRM] Tutorial selesai via fallback")
+            return true, true
+        end
+    end
+    return true, false
+end
+
 local function runAutoSkipTutorialGate()
-    -- Klik tengah dahulu agar tutorial/Coach bisa menampilkan tombol skip.
     task.wait(0.5)
-    clickTutorialCenter()
+    local showing, cleared = tutorialConfirmSkipIfShown()
+    if cleared then return true, true end
+    if not showing then clickTutorialCenter() end
 
     local detectDeadline = os.clock() + 4
     while __xynIsCurrentRun() and os.clock() < detectDeadline do
@@ -3777,44 +3934,47 @@ local function runAutoSkipTutorialGate()
         task.wait(0.12)
     end
     if not __xynIsCurrentRun() then return true, false end
-    if not tutorialModeDetected() then return false, true end
+    if not tutorialModeDetected() and not showing then return false, true end
 
     local attempts = 0
     while __xynIsCurrentRun() do
-        if waitForTutorialEnd(1.0) then
-            return true, true
-        end
-
-        attempts += 1
-        -- Gagal? Klik tengah lagi, lalu coba Skip lagi, tanpa pindah server.
-        clickTutorialCenter()
-        task.wait(0.6)
         if waitForTutorialEnd(1.0) then return true, true end
+        attempts += 1
 
-        local mainButton = waitForStableTutorialSkip(4)
-        if mainButton then
-            pressTutorialButton(mainButton)
-            local option1, option2, prompt = waitForTutorialPrompt(3)
-            if prompt and tutorialVisible(prompt) then
-                pressTutorialButton(option1)
-                if waitForTutorialEnd(2) then return true, true end
+        -- Prioritas: konfirmasi SKIP bila popup sudah ada.
+        showing, cleared = tutorialConfirmSkipIfShown()
+        if cleared then return true, true end
 
-                -- Coba tombol skip bawaan lagi lalu Option2 seperti patch asli.
-                mainButton = waitForStableTutorialSkip(4)
-                if mainButton then
-                    pressTutorialButton(mainButton)
-                    option1, option2, prompt = waitForTutorialPrompt(3)
-                    if prompt and tutorialVisible(prompt) then
-                        pressTutorialButton(option2)
-                        if waitForTutorialEnd(2) then return true, true end
-                    end
+        if not showing then
+            clickTutorialCenter()
+            task.wait(0.6)
+            if waitForTutorialEnd(1.0) then return true, true end
+
+            local mainButton = waitForStableTutorialSkip(4)
+            if mainButton then
+                local clicked = pressTutorialButton(mainButton)
+                warn("[TUTORIAL CLICK] target=" .. mainButton:GetFullName()
+                    .. " | visible=" .. tostring(tutorialVisible(mainButton))
+                    .. " | attempt=" .. tostring(attempts)
+                    .. " | inputSent=" .. tostring(clicked))
+                local option1, option2, prompt = waitForTutorialPrompt(3)
+                warn("[TUTORIAL PROMPT] found=" .. tostring(prompt ~= nil)
+                    .. " | Option1=" .. tostring(option1 ~= nil)
+                    .. " | Option2=" .. tostring(option2 ~= nil))
+                if prompt and tutorialVisible(prompt) then
+                    showing, cleared = tutorialConfirmSkipIfShown()
+                    if cleared then return true, true end
                 end
+            else
+                local gui = tutorialGameGui()
+                warn("[TUTORIAL CLICK] tombol skip belum ditemukan/visible | Game="
+                    .. tostring(gui ~= nil) .. " | attempt=" .. tostring(attempts))
             end
         end
 
         if waitForTutorialEnd(1.0) then return true, true end
         if attempts % 3 == 0 then
-            warn("[STARTUP FIX] Tutorial belum selesai; ulang klik tengah + Skip, percobaan " .. attempts)
+            warn("[STARTUP FIX] Tutorial belum selesai; ulang klik SKIP, percobaan " .. attempts)
         end
         task.wait(0.8)
     end
@@ -5776,6 +5936,61 @@ do
         local styleMod, teamSel, selectSlotRF
         local rejoinPending = false
 
+        -- v1.0.75: kunci slot pencarian The Twins setelah dipilih aman SEKALI.
+        -- Hasil spin (termasuk Sanju/Secret/Evo) tidak membuka pemilihan slot baru.
+        -- Simpan lintas rejoin agar snapshot hasil spin tidak dianggap slot awal.
+        local phase1Env = (typeof(getgenv) == "function" and getgenv()) or _G
+        local phase1Uid = tostring(player.UserId)
+        local phase1SlotKey = "VL_TWINS_PHASE1_SELECTED_SLOT_v175_" .. phase1Uid
+        local phase1SlotFile = phase1SlotKey .. ".txt"
+        local phase1JobKey = "__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. phase1Uid
+        local phase1ActiveKey = "__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. phase1Uid
+
+        local function decodePhase1Slot(value)
+            if type(value) ~= "string" then return nil end
+            local num = tonumber(value:match("^PHASE1|(%d+)$"))
+            if num and num >= 1 and num <= 100 and num % 1 == 0 then return num end
+            return nil
+        end
+        local function readPhase1Slot()
+            local saved
+            if typeof(readfile) == "function" then
+                pcall(function()
+                    if typeof(isfile) ~= "function" or isfile(phase1SlotFile) then
+                        saved = readfile(phase1SlotFile)
+                    end
+                end)
+            end
+            local num = decodePhase1Slot(saved)
+            if num then return num end
+            local ok, tpValue = pcall(function()
+                return TeleportService:GetTeleportSetting(phase1SlotKey)
+            end)
+            if ok then num = decodePhase1Slot(tpValue) end
+            if num then return num end
+            return decodePhase1Slot(phase1Env[phase1SlotKey])
+        end
+        local function commitPhase1Slot(num, reason)
+            local data = "PHASE1|" .. tostring(num)
+            phase1Env[phase1SlotKey] = data
+            phase1Env[phase1JobKey] = game.JobId
+            phase1Env[phase1ActiveKey] = num
+            local fileOk = false
+            if typeof(writefile) == "function" then
+                fileOk = pcall(function() writefile(phase1SlotFile, data) end)
+            end
+            local tpOk = pcall(function()
+                TeleportService:SetTeleportSetting(phase1SlotKey, data)
+            end)
+            print("[TWINS PHASE1 SLOT v1.0.75] LOCK slot=" .. tostring(num)
+                .. " | " .. tostring(reason) .. " | file=" .. tostring(fileOk)
+                .. " teleport=" .. tostring(tpOk))
+            if not fileOk and not tpOk then
+                warn("[TWINS PHASE1 SLOT] Lock belum tersimpan lintas rejoin;"
+                    .. " jangan abaikan kegagalan penyimpanan ini")
+            end
+        end
+
         -- Penangan kegagalan teleport, tanpa panel/log debug.
         TeleportService.TeleportInitFailed:Connect(function(failedPlayer, result, errorMessage, placeId)
             if rejoinPending and failedPlayer == player and placeId == game.PlaceId then
@@ -6045,6 +6260,55 @@ do
                 end
             end
 
+            -- LINTAS REJOIN: gunakan slot yang SUDAH dipilih aman sebelum spin.
+            -- Sanju/Secret/Ultra/Evo yang muncul sebagai HASIL roll bukan alasan STOP.
+            local lockedSlot = readPhase1Slot()
+            if lockedSlot then
+                local slots = getStyles()
+                local id = slots and (slots[lockedSlot] or slots[tostring(lockedSlot)])
+                if type(id) ~= "string" then
+                    warn("[TWINS PHASE1 SLOT] Slot kunci #" .. tostring(lockedSlot)
+                        .. " tidak ditemukan; spin ditahan agar slot lain tidak tertimpa")
+                    return false
+                end
+                if active == lockedSlot then
+                    commitPhase1Slot(lockedSlot, "lanjut fase The Twins; hasil sekarang=" .. id)
+                    return true
+                end
+                if not selectSlotRF then
+                    warn("[TWINS PHASE1 SLOT] SelectSlot belum siap; spin ditahan")
+                    return false
+                end
+                print("[TWINS PHASE1 SLOT] Pulihkan slot " .. tostring(lockedSlot)
+                    .. " (aktif=" .. tostring(active) .. "); rejoin sebelum lanjut")
+                local okRestore, response = pcall(function()
+                    return selectSlotRF:InvokeServer(lockedSlot)
+                end)
+                if not okRestore or response == false then
+                    warn("[TWINS PHASE1 SLOT] Pemulihan pilihan slot gagal: " .. tostring(response))
+                    return false
+                end
+                local untilTime = os.clock() + 6
+                while os.clock() < untilTime do
+                    if getCurrent() == lockedSlot then
+                        commitPhase1Slot(lockedSlot, "slot terpulihkan sebelum rejoin")
+                        rejoinPending = true
+                        task.wait(0.6)
+                        local sent, err = pcall(function()
+                            TeleportService:Teleport(game.PlaceId, player)
+                        end)
+                        if not sent then
+                            rejoinPending = false
+                            warn("[TWINS PHASE1 SLOT] Rejoin gagal: " .. tostring(err))
+                        end
+                        return false -- Jangan spin pada sesi yang mengubah pilihan slot.
+                    end
+                    task.wait(0.2)
+                end
+                warn("[TWINS PHASE1 SLOT] Slot kunci belum terverifikasi; spin ditahan")
+                return false
+            end
+
             local commonTarget, normalTarget, exceptionTarget, activeEntry
             for _, s in ipairs(all) do
                 if s.slot == active then activeEntry = s end
@@ -6109,6 +6373,7 @@ do
             end
 
             if activeEntry and activeEntry.slot == target.slot then
+                commitPhase1Slot(target.slot, "slot awal aman, sudah aktif")
                 return true -- Sudah aktif; lanjut ke skrip berikutnya tanpa rejoin.
             end
 
@@ -6125,6 +6390,7 @@ do
                 if now == target.slot then
                     local styles = getStyles()
                     if styles and styles[now] == target.id then
+                        commitPhase1Slot(target.slot, "slot awal aman, baru dipilih")
                         rejoinPending = true
                         task.wait(0.6)
                         if player and player.Parent then
@@ -6720,6 +6986,12 @@ end
 -- pertahankan aturan webhook NO SLOT, bukan rollback batas 30.
 local function stopFirstTargetIfNoSafeSlot()
     local uid = tostring(Player.UserId)
+    -- Pemilihan slot aman sudah dikunci pada awal fase The Twins.
+    -- Hindari NO_SLOT jika Sanju/Secret/Ultra/Evo muncul pada slot ROLL itu.
+    if cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. uid] == game.JobId
+        and type(cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. uid]) == "number" then
+        return false
+    end
     local checker = cacheEnv["__VL_FIRST_THE_TWINS_ALL_PROTECTED_" .. uid]
     if type(checker) ~= "function" then return false end
     local ok, first = pcall(checker)
@@ -6740,6 +7012,19 @@ end
 
 local function stopSuccess()
     rememberFirstTarget()
+    -- Hanya setelah The Twins berhasil: lock fase 1 tidak boleh terbawa
+    -- ke siklus baru. Mekanisme pemilihan slot Sanju tetap tidak diubah.
+    local phaseKey = "VL_TWINS_PHASE1_SELECTED_SLOT_v175_" .. tostring(Player.UserId)
+    cacheEnv[phaseKey] = nil
+    cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. tostring(Player.UserId)] = nil
+    cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. tostring(Player.UserId)] = nil
+    if typeof(delfile) == "function" then
+        pcall(function()
+            local filename = phaseKey .. ".txt"
+            if typeof(isfile) ~= "function" or isfile(filename) then delfile(filename) end
+        end)
+    end
+    pcall(function() TeleportService:SetTeleportSetting(phaseKey, "") end)
     mamoriBudget.resetAfterSuccess()
     targetFound = true
     running = false
@@ -7130,6 +7415,23 @@ task.spawn(function()
         end
         observeFirstTargetLucky(lucky)
 
+        -- Validasi ID slot, BUKAN rarity style hasil spin.
+        local firstSlotUid = tostring(Player.UserId)
+        if cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. firstSlotUid] == game.JobId then
+            local expectedSlot = cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. firstSlotUid]
+            local currentSlot
+            pcall(function()
+                if not TeamSel then TeamSel = Knit.GetController("TeamSelectionController") end
+                currentSlot = tonumber(__vlReadCell(TeamSel.CurrentStyleSlot))
+            end)
+            if currentSlot ~= expectedSlot then
+                mamoriWatch("Slot fase The Twins berubah/tidak terbaca: aktif="
+                    .. tostring(currentSlot) .. " lock=" .. tostring(expectedSlot)
+                    .. "; spin DITAHAN agar tidak menimpa slot lain")
+                task.wait(0.5)
+                continue
+            end
+        end
         if stopFirstTargetIfNoSafeSlot() then break end
         if mamoriBudget.capped() then
             print("[AutoSpin] BATAS " .. tostring(mamoriBudget.limit())
