@@ -14,7 +14,7 @@ local function __vlReadCell(cell)
     return nil
 end
 
--- VERSION: v1.0.73-SANJU-SLOT-LOCK-CELL-FIX | STYLE 1 Yogan (Pity Twin1_5) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
+-- VERSION: v1.0.73-SANJU-SLOT-LOCK-CELL-FIX | STYLE 1 Yogan (Pity Yogan3) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Yogan + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -470,7 +470,7 @@ do
                         local slots = readSignal(teamA.Styles)
                         if type(slots) ~= "table" then return nil end
                         for _, id in pairs(slots) do
-                            if type(id) == "string" and id:lower() == "twin1_5" then
+                            if type(id) == "string" and id:lower() == "Yogan3" then
                                 markOwnedCache()
                                 return true
                             end
@@ -1024,7 +1024,7 @@ do
                     for key, id in pairs(slots) do
                         local n = tonumber(key)
                         if n and n >= 1 and n % 1 == 0
-                            and (getStyleName(id) == "Yogan" or id == "Twin1_5") then
+                            and (getStyleName(id) == "Yogan" or id == "Yogan3") then
                             matches[#matches + 1] = n
                         end
                     end
@@ -1158,7 +1158,7 @@ do
                 end
                 local knownProtected = {
                     ["timeskip okazu"]=true, timeskiptoru4=true,
-                    ["Yogan"]=true, twin1_5=true, ["sanju"]=true, rintaro=true,
+                    ["Yogan"]=true, Yogan3=true, ["sanju"]=true, rintaro=true,
                     mamori=true, kijo=true, kijo3=true, sanju=true, kisuki=true,
                     kazana=true, hidari=true, yogan=true, feiko=true,
                     ibara=true, kumo=true, mikage=true, taichou=true,
@@ -1241,7 +1241,7 @@ do
                     local byCategory = {Secret={}, Ultra={}, Evo={}}
                     local unknown = {}
                     local known = {
-                        Secret={kijo=true,kijo3=true,["timeskip okazu"]=true,timeskiptoru4=true, ["Yogan"]=true, twin1_5=true, ["sanju"]=true, rintaro=true, mamori=true,sanju=true,kisuki=true,kazana=true,
+                        Secret={kijo=true,kijo3=true,["timeskip okazu"]=true,timeskiptoru4=true, ["Yogan"]=true, Yogan3=true, ["sanju"]=true, rintaro=true, mamori=true,sanju=true,kisuki=true,kazana=true,
                             hidari=true,yogan=true,feiko=true,ibara=true,
                             kumo=true,mikage=true,taichou=true},
                         Ultra={hakka=true,akari=true,ronin=true},
@@ -1326,10 +1326,10 @@ do
                     return knownProtected[name] == true
                         or knownProtected[base] == true
                         or base:find("mamori", 1, true) ~= nil
-                        or base:find("twin1_5", 1, true) ~= nil
+                        or base:find("Yogan3", 1, true) ~= nil
                         or base:find("timeskiptoru4", 1, true) ~= nil
                         or base:find("rintaro", 1, true) ~= nil
-                        or base:find("twin1_5", 1, true) ~= nil
+                        or base:find("Yogan3", 1, true) ~= nil
                         or base:find("timeskiptoru4", 1, true) ~= nil
                         or name == "sanju"
                 end
@@ -1351,7 +1351,7 @@ do
                         or dn == "mamori" or dn == "Yogan" or dn == "sanju"
                         or base == "rintaro"
                         or base:find("rintaro", 1, true)
-                        or base:find("twin1_5", 1, true) then
+                        or base:find("Yogan3", 1, true) then
                         return nil, "target dilindungi"
                     end
                     -- Dicek SEBELUM knownProtected (keduanya ada di sana).
@@ -6048,7 +6048,7 @@ do
             kishoti=true, yachikusai=true}
         local knownSecret = {mamori=true, sanju=true, timeskiptoru4=true, ["timeskip okazu"]=true, kisuki=true, kazana=true,
             hidari=true, yogan=true, feiko=true, ibara=true, kumo=true,
-            kijo=true, kijo3=true, twin1_5=true, rintaro=true, ["Yogan"]=true, ["sanju"]=true, mikage=true, taichou=true}
+            kijo=true, kijo3=true, Yogan3=true, rintaro=true, ["Yogan"]=true, ["sanju"]=true, mikage=true, taichou=true}
         local knownUltra = {hakka=true, akari=true, ronin=true}
         local knownEvo = {encho=true}
 
@@ -6960,7 +6960,7 @@ local function hasFirstTargetStyle()
 
         if type(styles) == "table" and StyleMod then
             for _, id in pairs(styles) do
-                if type(id) == "string" and id:lower() == "twin1_5" then
+                if type(id) == "string" and id:lower() == "Yogan3" then
                     found = true
                     break
                 end
@@ -7080,10 +7080,10 @@ end)
 
 task.wait(1)
 
--- STYLE PITY FASE 1 (Yogan = Twin1_5)
+-- STYLE PITY FASE 1 (Yogan = Yogan3)
 -- Tidak ada spin Yogan sebelum PreferredSecret benar dan pilihan tersimpan.
 -- Setelah memilih Pity baru, lakukan rejoin, lalu cek ulang pada sesi berikutnya.
-local FIRST_PITY_ID = "Twin1_5"
+local FIRST_PITY_ID = "Yogan3"
 local firstPityFile = "VL_TheTwinsFirst_Pity_v166_" .. tostring(Player.UserId) .. ".txt"
 local firstPityKey = "VL_TheTwinsFirst_Pity_v166_" .. tostring(Player.UserId)
 local function preferredFirstPity()
@@ -7146,7 +7146,7 @@ local function selectFirstPity()
         btn = findFirstPityButton()
     end
     if not btn or not btn:IsA("GuiButton") then
-        warn("[PITY FASE 1] Tombol Twin1_5 tidak ditemukan di SecretPity")
+        warn("[PITY FASE 1] Tombol Yogan3 tidak ditemukan di SecretPity")
         return false
     end
     local ups = (debug and debug.getupvalues) or getupvalues
@@ -7171,7 +7171,7 @@ local function selectFirstPity()
                         else
                             for _ = 1, 25 do
                                 if preferredFirstPity() == true then
-                                    print("[PITY FASE 1] Twin1_5 terkonfirmasi")
+                                    print("[PITY FASE 1] Yogan3 terkonfirmasi")
                                     return true
                                 end
                                 task.wait(0.2)
@@ -7195,18 +7195,18 @@ local function waitForFirstPity()
                 if selectedHere then
                     if os.clock() - lastRejoin > 14 then
                         lastRejoin = os.clock()
-                        print("[PITY FASE 1] Rejoin untuk menyimpan Twin1_5; spin ditahan")
+                        print("[PITY FASE 1] Rejoin untuk menyimpan Yogan3; spin ditahan")
                         local ok, err = pcall(function() TeleportService:Teleport(game.PlaceId, Player) end)
                         if not ok then warn("[PITY FASE 1] Rejoin gagal: " .. tostring(err)) end
                     end
                     task.wait(2)
                 else
                     clearFirstPityPending()
-                    print("[PITY FASE 1] Twin1_5 tersimpan setelah rejoin; spin diizinkan")
+                    print("[PITY FASE 1] Yogan3 tersimpan setelah rejoin; spin diizinkan")
                     return true
                 end
             else
-                print("[PITY FASE 1] Twin1_5 telah terpilih, spin diizinkan")
+                print("[PITY FASE 1] Yogan3 telah terpilih, spin diizinkan")
                 return true
             end
         elseif selected == false then
@@ -7214,7 +7214,7 @@ local function waitForFirstPity()
             if selectFirstPity() then
                 if saveFirstPityPending() then
                     selectedHere = true
-                    print("[PITY FASE 1] Twin1_5 dipilih; wajib rejoin sebelum spin")
+                    print("[PITY FASE 1] Yogan3 dipilih; wajib rejoin sebelum spin")
                 else
                     warn("[PITY FASE 1] Gagal menyimpan penanda Pity; tahan spin")
                 end
@@ -7228,7 +7228,7 @@ local function waitForFirstPity()
     return false
 end
 if not waitForFirstPity() then
-    warn("[PITY FASE 1] Twin1_5 belum siap; AutoSpin tidak dimulai")
+    warn("[PITY FASE 1] Yogan3 belum siap; AutoSpin tidak dimulai")
     return
 end
 
