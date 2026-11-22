@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.73-SANJU-SLOT-LOCK: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.81-LUCKY-15-15: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -14,7 +14,130 @@ local function __vlReadCell(cell)
     return nil
 end
 
--- VERSION: v1.0.73-SANJU-SLOT-LOCK-CELL-FIX | STYLE 1 Yogan (Pity Yogan3) -> STYLE 2 Sanju (Pity Rintaro) | leveling & team nonblocking, tutorial retained
+-- ================================================================
+-- KONFIGURASI STYLE (UBAH NAMA DAN TRUE/FALSE DI SINI)
+-- Isi dengan nama Style yang terlihat di menu game, BUKAN ID Pity.
+-- Contoh: "The Twins", "Yogan", "Sanju", "Timeskip Okazu".
+-- ID Pity dicari oleh GUI ID Scanner otomatis saat menu Styles terbuka.
+-- ================================================================
+local FIRST_STYLE_NAME  = "Yogan" -- STYLE 1: target pertama
+local SECOND_STYLE_NAME = "Sanju" -- STYLE 2: target jika mode dua style aktif
+
+-- true  = dua style; MAKSIMAL 30 Lucky total: 15 untuk Style 1, 15 untuk Style 2.
+--         Jika saldo awal <30, jatah fase pertama dibagi sekitar separuh;
+--         fase kedua menggunakan sisa saldo dengan batas maksimal 15.
+-- false = satu style; MAKSIMAL 30 Lucky untuk Style 1, fase kedua tidak aktif.
+local SPIN_TWO_STYLES = true
+
+local MAX_LUCKY_TOTAL = 30
+local MAX_LUCKY_STYLE_1 = SPIN_TWO_STYLES and math.ceil(MAX_LUCKY_TOTAL / 2) or MAX_LUCKY_TOTAL
+local MAX_LUCKY_STYLE_2 = math.floor(MAX_LUCKY_TOTAL / 2)
+
+local function __vlNormalizeStyleName(name)
+    if type(name) ~= "string" then return "" end
+    return name:match("^%s*(.-)%s*$"):lower()
+end
+
+local function __vlIsFirst(name)
+    return __vlNormalizeStyleName(name) == __vlNormalizeStyleName(FIRST_STYLE_NAME)
+end
+local function __vlIsSecond(name)
+    return __vlNormalizeStyleName(name) == __vlNormalizeStyleName(SECOND_STYLE_NAME)
+end
+local function __vlSafeName(name)
+    return __vlNormalizeStyleName(name):gsub("[^%w]+", "_")
+end
+-- Pisahkan data lintas rejoin untuk SETIAP kombinasi target.
+-- Konfigurasi default mempertahankan nama data lama agar kompatibel.
+local function __vlConfigSuffix()
+    -- Pisahkan state mode solo dari mode dua style agar budget, cache, dan
+    -- penanda webhook tidak tertukar ketika true/false diganti.
+    if not SPIN_TWO_STYLES then
+        return "_SOLO_" .. __vlSafeName(FIRST_STYLE_NAME)
+    end
+    if __vlNormalizeStyleName(FIRST_STYLE_NAME) == "yogan" and __vlNormalizeStyleName(SECOND_STYLE_NAME) == "sanju" then return "" end
+    return "_" .. __vlSafeName(FIRST_STYLE_NAME) .. "_" .. __vlSafeName(SECOND_STYLE_NAME)
+end
+local function __vlFirstOwnedFile(userId)
+    return "VL_" .. __vlSafeName(FIRST_STYLE_NAME) .. "_Owned_" .. tostring(userId) .. ".flag"
+end
+local function __vlFirstOwnedKey(userId)
+    return "__VL_" .. __vlSafeName(FIRST_STYLE_NAME):upper() .. "_OWNED_" .. tostring(userId)
+end
+local function __vlFirstOwnedToken()
+    return __vlSafeName(FIRST_STYLE_NAME):upper() .. "_OWNED"
+end
+
+assert(__vlNormalizeStyleName(FIRST_STYLE_NAME) ~= "", "STYLE 1 kosong")
+assert(type(SPIN_TWO_STYLES) == "boolean", "SPIN_TWO_STYLES harus true atau false")
+if SPIN_TWO_STYLES then
+    assert(__vlNormalizeStyleName(SECOND_STYLE_NAME) ~= "", "STYLE 2 kosong")
+    assert(not __vlIsFirst(SECOND_STYLE_NAME), "STYLE 1 dan STYLE 2 tidak boleh sama")
+end
+print("[STYLE CONFIG] Mode=" .. (SPIN_TWO_STYLES and "DUA STYLE" or "SATU STYLE")
+    .. " | Style 1=" .. FIRST_STYLE_NAME
+    .. (SPIN_TWO_STYLES and (" | Style 2=" .. SECOND_STYLE_NAME) or " | Style 2=NONAKTIF")
+    .. " | Limit Lucky=" .. (SPIN_TWO_STYLES
+        and (tostring(MAX_LUCKY_STYLE_1) .. "+" .. tostring(MAX_LUCKY_STYLE_2)
+            .. " (total maksimal " .. tostring(MAX_LUCKY_TOTAL) .. ")")
+        or ("maksimal " .. tostring(MAX_LUCKY_STYLE_1) .. " untuk satu style"))
+    .. " | Pity dari GUI ID Scanner")
+
+-- Integrasi SCAN GUI dari Style_IDScanner_All.lua.
+-- DisplayName/label hanya dipakai untuk MENCARI entri yang sesuai;
+-- ID Secret Pity selalu diambil dari Name OBJEK GUI hasil scanner.
+-- Tidak memetakan dari StyleMod:GetActive(), tidak menebak ID manual.
+local function __vlScannerLabel(entry)
+    local preferred = {
+        "DisplayName", "StyleName", "CharacterName", "CharName",
+        "NameLabel", "Title", "Display"
+    }
+    for _, name in ipairs(preferred) do
+        local node = entry:FindFirstChild(name, true)
+        if node and (node:IsA("TextLabel") or node:IsA("TextButton"))
+            and type(node.Text) == "string" and node.Text ~= "" then
+            return node.Text:gsub("[\r\n]", " ")
+        end
+    end
+    return nil
+end
+
+local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
+    if not pityList then
+        return nil, "Scanner: SecretPity/BGFrame/Body/List belum tersedia"
+    end
+    local target = __vlNormalizeStyleName(displayName)
+    if target == "" then return nil, "Scanner: nama target kosong" end
+    local matches = {}
+    local nonButtons = 0
+    -- Persis sumber ID scanner: nama objek dari entri dalam daftar Secret Pity.
+    for _, entry in ipairs(pityList:GetChildren()) do
+        if entry:IsA("GuiObject")
+            and not entry.Name:lower():find("template", 1, true) then
+            local visibleName = __vlScannerLabel(entry)
+            if visibleName and __vlNormalizeStyleName(visibleName) == target then
+                if entry:IsA("GuiButton") then
+                    matches[#matches + 1] = entry.Name
+                else
+                    nonButtons += 1
+                end
+            end
+        end
+    end
+    table.sort(matches)
+    if #matches == 1 then
+        return matches[1]
+    elseif #matches > 1 then
+        return nil, "Scanner: lebih dari satu tombol Pity bernama "
+            .. displayName .. ": " .. table.concat(matches, ", ")
+    elseif nonButtons > 0 then
+        return nil, "Scanner: entri " .. displayName
+            .. " ditemukan tetapi bukan GuiButton; callback tidak dijalankan"
+    end
+    return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
+end
+
+-- VERSION: v1.0.81-LUCKY-15-15 | satu style maksimal 30 Lucky; dua style maksimal 15 + 15 Lucky; label debug sinkron
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Yogan + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -51,7 +174,7 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
         used, last, limit = tonumber(used), tonumber(last), tonumber(limit)
         if not used or used < 0 or used > 100000
             or not last or last < -1 or last > 1000000
-            or (not legacy and (not limit or limit < -1 or limit > maximum)) then
+            or (not legacy and (not limit or limit < -1 or limit > MAX_LUCKY_TOTAL)) then
             return false
         end
         state.spent = used
@@ -61,6 +184,11 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
         -- Budget lama yang telah terpakai dipertahankan sampai rollback.
         state.limit = legacy and (used > 0 and maximum or nil)
             or (limit == -1 and nil or limit)
+        -- Data budget lama bisa mencatat limit 30 untuk tiap fase.
+        -- Turunkan ke limit baru TANPA menghapus jumlah Lucky yang telah dipakai.
+        if type(state.limit) == "number" then
+            state.limit = math.min(state.limit, maximum)
+        end
         return true
     end
     local loaded = false
@@ -122,11 +250,14 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
             -- Jangan menghitung ulang pembagian jika rejoin di tengah fase.
             if state.spent > 0 then
                 state.limit = maximum -- pemulihan budget lawas yang sedang berjalan
-            elseif phase == "THE_TWINS_FIRST" and balance <= 29 then
-                state.limit = math.ceil(balance / 2)
-            elseif phase == "SANJU" and balance <= 29 then
-                -- Semua sisa Yogan menjadi jatah Sanju, tanpa dibagi lagi.
-                state.limit = balance
+            elseif SPIN_TWO_STYLES and phase:match("^THE_TWINS_FIRST")
+                and balance < MAX_LUCKY_TOTAL then
+                -- Dua style: saldo kecil dibagi; tidak pernah melebihi 15 untuk fase pertama.
+                state.limit = math.min(math.ceil(balance / 2), maximum)
+            elseif SPIN_TWO_STYLES and phase:match("^SANJU")
+                and balance < MAX_LUCKY_TOTAL then
+                -- Dua style: sisa saldo di fase kedua, maksimal 15.
+                state.limit = math.min(balance, maximum)
             else
                 state.limit = maximum
             end
@@ -189,16 +320,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.73-SANJU-SLOT-LOCK: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.81-LUCKY-15-15: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.73-SANJU-SLOT-LOCK] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.81-LUCKY-15-15] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.73-SANJU-SLOT-LOCK] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.81-LUCKY-15-15] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.73-SANJU-SLOT-LOCK] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.81-LUCKY-15-15] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -208,7 +339,7 @@ end
 --  * Pemilihan slot: Common > aman > Kimiro (terakhir); Rintaro/Sanju dilindungi.
 --  * chooseSafeStyleSlot lebih tahan (SelectSlot tunggu 10 dtk, tidak stop
 --    hanya karena data belum sinkron).
---  * Menu Styles dibuka sebelum mencari tombol Secret Pity Rintaro.
+--  * Menu Styles dibuka sebelum mencari tombol Secret Pity Sanju.
 --  * Loop spin Yogan meniru Mamori: jeda tetap 0.55 dtk, fallback Knit,
 --    roll gagal/ditolak tidak menghentikan worker, rollback setelah Lucky 0.
 -- =====================================================================
@@ -271,17 +402,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.73-SANJU-SLOT-LOCK: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.81-LUCKY-15-15: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.73-SANJU-SLOT-LOCK] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.81-LUCKY-15-15] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.73-SANJU-SLOT-LOCK: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.81-LUCKY-15-15: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -297,7 +428,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.73-SANJU-SLOT-LOCK: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.81-LUCKY-15-15: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -319,7 +450,7 @@ do
                     end
                 end)
                 attachTwinsDebug()
-                twinsStatus("Add-on dimulai; debug aktif sebelum cek Yogan")
+                twinsStatus("Add-on dimulai; debug aktif sebelum cek " .. FIRST_STYLE_NAME)
                 task.spawn(function()
                     while playerA.Parent do
                         task.wait(2)
@@ -432,8 +563,8 @@ do
                     return knitA
                 end
 
-                local OWNED_FILE = "VL_TheTwins_Owned_" .. tostring(playerA.UserId) .. ".flag"
-                local OWNED_KEY = "__VL_THE_TWINS_OWNED_" .. tostring(playerA.UserId)
+                local OWNED_FILE = __vlFirstOwnedFile(playerA.UserId)
+                local OWNED_KEY = __vlFirstOwnedKey(playerA.UserId)
                 local function hasOwnedCache()
                     if env[OWNED_KEY] == true then return true end
                     if typeof(readfile) ~= "function" then return false end
@@ -441,7 +572,7 @@ do
                         if typeof(isfile) == "function" and not isfile(OWNED_FILE) then return nil end
                         return readfile(OWNED_FILE)
                     end)
-                    if ok and v == "THE_TWINS_OWNED" then
+                    if ok and v == __vlFirstOwnedToken() then
                         env[OWNED_KEY] = true
                         return true
                     end
@@ -450,7 +581,7 @@ do
                 local function markOwnedCache()
                     env[OWNED_KEY] = true
                     if typeof(writefile) == "function" then
-                        pcall(function() writefile(OWNED_FILE, "THE_TWINS_OWNED") end)
+                        pcall(function() writefile(OWNED_FILE, __vlFirstOwnedToken()) end)
                     end
                 end
 
@@ -470,13 +601,9 @@ do
                         local slots = readSignal(teamA.Styles)
                         if type(slots) ~= "table" then return nil end
                         for _, id in pairs(slots) do
-                            if type(id) == "string" and id:lower() == "Yogan3" then
-                                markOwnedCache()
-                                return true
-                            end
                             local valid, def = pcall(function() return styleModA:Get(id) end)
                             if valid and def and type(def.DisplayName) == "string"
-                                and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "Yogan" then
+                                and __vlIsFirst(def.DisplayName) then
                                 markOwnedCache()
                                 return true
                             end
@@ -499,7 +626,7 @@ do
                     local ok, def = pcall(function() return styleModA:Get(id) end)
                     if ok and def then
                         local label = def.DisplayName or tostring(id)
-                        return label, tostring(label):lower():match("^%s*(.-)%s*$") == "Yogan"
+                        return label, __vlNormalizeStyleName(label) == __vlNormalizeStyleName(FIRST_STYLE_NAME)
                     end
                     return tostring(id), false
                 end
@@ -511,10 +638,10 @@ do
                         if id and id:lower() ~= "nil" then
                             lastStyleMessageAt = os.clock()
                             local label, target = styleName(id)
-                            publishHistory("STYLE", label, target or tostring(label):lower() == "sanju")
+                            publishHistory("STYLE", label, target or __vlIsSecond(label))
                         end
-                    elseif message:find("[AutoSpin] Yogan SUDAH DIDAPATKAN", 1, true) then
-                        publishHistory("STYLE", "Yogan", true)
+                    elseif message:find("[AutoSpin] " .. FIRST_STYLE_NAME .. " SUDAH DIDAPATKAN", 1, true) then
+                        publishHistory("STYLE", FIRST_STYLE_NAME, true)
                     end
                 end)
                 task.spawn(function()
@@ -547,7 +674,7 @@ do
                                     end)
                                     if ok and id then
                                         local label, target = styleName(id)
-                                        publishHistory("STYLE", label, target or tostring(label):lower() == "sanju")
+                                        publishHistory("STYLE", label, target or __vlIsSecond(label))
                                     end
                                 end)
                             end
@@ -640,7 +767,7 @@ do
                     end
                     -- Versi baru: notifikasi lengkap tidak tertahan flag versi lama.
                     local file = "VL_TheTwins_Sanju_Final_Once_v166_"
-                        .. tostring(playerA.UserId) .. ".flag"
+                        .. tostring(playerA.UserId) .. __vlConfigSuffix() .. ".flag"
                     local okRead, existing = pcall(function()
                         if isfile(file) then return readfile(file) end
                         return nil
@@ -661,17 +788,17 @@ do
                     if not marked then webhookBusy = false; return end
                     task.spawn(function()
                         local statusLabel = reason == "LOW_LUCKY_SANJU"
-                            and "STOP: Lucky awal Sanju <=3; tidak melakukan spin Sanju"
+                            and "STOP: Lucky awal " .. SECOND_STYLE_NAME .. " <=3; tidak melakukan spin " .. SECOND_STYLE_NAME
                             or (reason == "NO_SLOT_FIRST_THE_TWINS"
-                                and "STOP: tidak ada slot aman untuk mencari Yogan"
+                                and "STOP: tidak ada slot aman untuk mencari " .. FIRST_STYLE_NAME
                                 or (reason == "NO_SLOT_SANJU"
-                                and "STOP: Yogan dimiliki, tidak ada slot aman untuk Sanju"
-                                or (hasTwins and "SELESAI: Yogan + Sanju"
-                                    or "SELESAI: Yogan")))
+                                and "STOP: " .. FIRST_STYLE_NAME .. " dimiliki, tidak ada slot aman untuk " .. SECOND_STYLE_NAME
+                                or (hasTwins and "SELESAI: " .. FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME
+                                    or "SELESAI: " .. FIRST_STYLE_NAME)))
                         local owned = reason ~= "NO_SLOT_FIRST_THE_TWINS"
                             and hasFirstTarget() == true
-                        local styleResult = hasTwins and "Yogan + Sanju"
-                            or (owned and "Yogan" or "Yogan belum didapat")
+                        local styleResult = hasTwins and FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME
+                            or (owned and FIRST_STYLE_NAME or FIRST_STYLE_NAME .. " belum didapat")
                         local secret = knownSecretName()
                         local content = "@everyone\n✅ Hasil akhir pencarian Style!\n"
                             .. "Akun: " .. tostring(playerA.Name)
@@ -710,12 +837,14 @@ do
                     end)
                 end
                 -- Dapat dipanggil oleh fase Yogan pertama tanpa menggandakan webhook.
-                local noSlotFirstOkazuKey = "__VL_FIRST_THE_TWINS_NO_SLOT_" .. tostring(playerA.UserId)
-                env["__VL_FINAL_NOTIFY_" .. tostring(playerA.UserId)] = notifyFinal
+                local noSlotFirstOkazuKey = "__VL_FIRST_THE_TWINS_NO_SLOT_" .. tostring(playerA.UserId) .. __vlConfigSuffix()
+                env["__VL_FINAL_NOTIFY_" .. tostring(playerA.UserId) .. __vlConfigSuffix()] = notifyFinal
 
                 showPopup = function(popupText)
-                    publishHistory("STYLE", "Yogan", true)
-                    publishHistory("STYLE", "Sanju", true)
+                    publishHistory("STYLE", FIRST_STYLE_NAME, true)
+                    if SPIN_TWO_STYLES then
+                        publishHistory("STYLE", SECOND_STYLE_NAME, true)
+                    end
                     local ownedSlots = abilityA and abilityA.Abilities and readSignal(abilityA.Abilities)
                     if type(ownedSlots) == "table" and type(rarityMap) == "table" then
                         for _, abilityId in pairs(ownedSlots) do
@@ -780,7 +909,7 @@ do
                     message.BackgroundTransparency = 1
                     message.Size = UDim2.fromOffset(284, 58)
                     message.Position = UDim2.fromOffset(44, 10)
-                    message.Text = "Sudah Mendapatkan Target\n" .. tostring(popupText or "Yogan + Sanju")
+                    message.Text = "Sudah Mendapatkan Target\n" .. tostring(popupText or (SPIN_TWO_STYLES and (FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME) or FIRST_STYLE_NAME))
                     message.TextWrapped = true
                     message.TextYAlignment = Enum.TextYAlignment.Top
                     message.TextXAlignment = Enum.TextXAlignment.Left
@@ -910,7 +1039,7 @@ do
                 TPA.TeleportInitFailed:Connect(function(p, result, message)
                     if p == playerA then
                         saveRejoinInProgress = false
-                        warn("[ABILITY ADD-ON] Rejoin penyimpanan Yogan ditolak: "
+                        warn("[ABILITY ADD-ON] Rejoin penyimpanan " .. FIRST_STYLE_NAME .. " ditolak: "
                             .. tostring(result) .. " / " .. tostring(message))
                     end
                 end)
@@ -924,7 +1053,7 @@ do
                         TPA:Teleport(game.PlaceId, playerA)
                     end)
                     if not ok then
-                        warn("[ABILITY ADD-ON] Rejoin penyimpanan Yogan gagal: " .. tostring(err))
+                        warn("[ABILITY ADD-ON] Rejoin penyimpanan " .. FIRST_STYLE_NAME .. " gagal: " .. tostring(err))
                     end
                 end
 
@@ -956,7 +1085,7 @@ do
                     local slots = readSignal(teamA.Styles)
                     if type(slots) ~= "table" then return nil end
                     for _, id in pairs(slots) do
-                        if getStyleName(id) == "sanju" or (type(id) == "string" and id:lower() == "rintaro") then return true end
+                        if __vlIsSecond(getStyleName(id)) then return true end
                     end
                     return false
                 end
@@ -979,14 +1108,14 @@ do
                     if type(slots) ~= "table" or not idx then return nil end
                     return slots[idx] or slots[tostring(idx)]
                 end
-                -- v1.0.54: budget 30 Lucky Yogan persisten lintas rejoin.
+                -- Batas fase kedua maksimal 15 Lucky saat mode dua style.
                 -- Lucky yang digunakan membersihkan duplikat juga dihitung.
-                local MAX_TWINS_LUCKY_SPENT = 30
+                local MAX_TWINS_LUCKY_SPENT = MAX_LUCKY_STYLE_2
                 local twinsBudget = makePersistentLuckyBudget(
-                    playerA.UserId, "SANJU", MAX_TWINS_LUCKY_SPENT)
+                    playerA.UserId, "SANJU" .. __vlConfigSuffix(), MAX_TWINS_LUCKY_SPENT)
                 local twinsLuckyPendingBefore = nil
                 local clearTwinsInitialDecision -- ditetapkan di blok komitmen Sanju
-                twinsStatus("Budget Lucky Sanju: " .. tostring(twinsBudget.spent())
+                twinsStatus("Budget Lucky " .. SECOND_STYLE_NAME .. ": " .. tostring(twinsBudget.spent())
                     .. "/" .. tostring(twinsBudget.limit())
                     .. " (tersimpan lintas rejoin); rollback pending="
                     .. tostring(twinsBudget.isRollbackPending()))
@@ -999,10 +1128,10 @@ do
                         if type(clearTwinsInitialDecision) == "function" then
                             clearTwinsInitialDecision()
                         end
-                        twinsStatus("Rollback Sanju terdeteksi: saldo Lucky pulih;"
+                        twinsStatus("Rollback " .. SECOND_STYLE_NAME .. " terdeteksi: saldo Lucky pulih;"
                             .. " budget baru 0/" .. tostring(twinsBudget.limit()))
                     elseif used > before then
-                        twinsStatus("Lucky Sanju terpakai " .. tostring(used)
+                        twinsStatus("Lucky " .. SECOND_STYLE_NAME .. " terpakai " .. tostring(used)
                             .. "/" .. tostring(twinsBudget.limit())
                             .. " | Sisa saldo " .. tostring(balance))
                     end
@@ -1024,7 +1153,7 @@ do
                     for key, id in pairs(slots) do
                         local n = tonumber(key)
                         if n and n >= 1 and n % 1 == 0
-                            and (getStyleName(id) == "Yogan" or id == "Yogan3") then
+                            and __vlIsFirst(getStyleName(id)) then
                             matches[#matches + 1] = n
                         end
                     end
@@ -1034,7 +1163,7 @@ do
                 local function clearDuplicateFirstTarget(ctrl, rollRF, selectRF)
                     local found = findDuplicateFirstTarget()
                     if not found then
-                        return false, "Data slot Yogan belum siap"
+                        return false, "Data slot " .. FIRST_STYLE_NAME .. " belum siap"
                     end
                     if #found <= 1 then return true end
                     -- v1.0.47: Roll RF wajib ada untuk membersihkan duplikat.
@@ -1056,7 +1185,7 @@ do
                     for _, slot in ipairs(found) do
                         if slot ~= extra then keep = slot; break end
                     end
-                    if not keep then return false, "Tidak bisa menentukan Yogan yang dipertahankan" end
+                    if not keep then return false, "Tidak bisa menentukan " .. FIRST_STYLE_NAME .. " yang dipertahankan" end
                     local lucky = readSignal(ctrl and ctrl.LuckySpins)
                     local normal = readSignal(ctrl and ctrl.Spins)
                     observeTwinsLucky(lucky)
@@ -1064,7 +1193,7 @@ do
                         return false, "Jumlah spin belum tersinkron"
                     end
                     if lucky <= 0 and normal <= 0 then
-                        twinsStatus("Yogan ganda di slot " .. tostring(found[1])
+                        twinsStatus(FIRST_STYLE_NAME .. " ganda di slot " .. tostring(found[1])
                             .. " & " .. tostring(extra) .. "; spin habis, tidak bisa bersihkan")
                         return "NO_SPINS"
                     end
@@ -1075,13 +1204,13 @@ do
                     if useLucky and twinsLuckyPendingBefore then
                         return false, "LUCKY_PENDING"
                     end
-                    twinsStatus("Yogan duplikat: pertahankan slot " .. tostring(keep)
+                    twinsStatus(FIRST_STYLE_NAME .. " duplikat: pertahankan slot " .. tostring(keep)
                         .. ", spin ULANG slot " .. tostring(extra)
                         .. (useLucky and " (Lucky)" or " (Normal)"))
                     if tonumber(readSignal(teamA.CurrentStyleSlot)) ~= extra then
                         local ok, result = pcall(selectRF.InvokeServer, selectRF, extra)
                         if not ok or result == false then
-                            twinsStatus("Gagal memilih Yogan duplikat: " .. tostring(result))
+                            twinsStatus("Gagal memilih " .. FIRST_STYLE_NAME .. " duplikat: " .. tostring(result))
                             return false, "SelectSlot gagal"
                         end
                         local swapped = false
@@ -1133,7 +1262,7 @@ do
                     end
                     if useLucky then observeTwinsLucky(readSignal(ctrl.LuckySpins)) end
                     local after = findDuplicateFirstTarget()
-                    twinsStatus("Spin Yogan duplikat selesai; sisa Yogan="
+                    twinsStatus("Spin " .. FIRST_STYLE_NAME .. " duplikat selesai; sisa " .. FIRST_STYLE_NAME .. "="
                         .. tostring(after and #after or "belum sinkron"))
                     return true
                 end
@@ -1158,7 +1287,7 @@ do
                 end
                 local knownProtected = {
                     ["timeskip okazu"]=true, timeskiptoru4=true,
-                    ["Yogan"]=true, Yogan3=true, ["sanju"]=true, rintaro=true,
+                    ["yogan"]=true, ["sanju"]=true, rintaro=true,
                     mamori=true, kijo=true, kijo3=true, sanju=true, kisuki=true,
                     kazana=true, hidari=true, yogan=true, feiko=true,
                     ibara=true, kumo=true, mikage=true, taichou=true,
@@ -1241,7 +1370,7 @@ do
                     local byCategory = {Secret={}, Ultra={}, Evo={}}
                     local unknown = {}
                     local known = {
-                        Secret={kijo=true,kijo3=true,["timeskip okazu"]=true,timeskiptoru4=true, ["Yogan"]=true, Yogan3=true, ["sanju"]=true, rintaro=true, mamori=true,sanju=true,kisuki=true,kazana=true,
+                        Secret={kijo=true,kijo3=true,["timeskip okazu"]=true,timeskiptoru4=true, ["yogan"]=true, ["sanju"]=true, rintaro=true, mamori=true,sanju=true,kisuki=true,kazana=true,
                             hidari=true,yogan=true,feiko=true,ibara=true,
                             kumo=true,mikage=true,taichou=true},
                         Ultra={hakka=true,akari=true,ronin=true},
@@ -1318,6 +1447,8 @@ do
                     return table.concat(lines, "\n")
                 end
 
+                knownProtected[__vlNormalizeStyleName(FIRST_STYLE_NAME)] = true
+                knownProtected[__vlNormalizeStyleName(SECOND_STYLE_NAME)] = true
                 local function isProtectedResult(id)
                     if type(id) ~= "string" or id == "" then return true end
                     local def = styleDef(id)
@@ -1325,13 +1456,11 @@ do
                     local base = lower(id)
                     return knownProtected[name] == true
                         or knownProtected[base] == true
+                        or __vlIsFirst(name) or __vlIsSecond(name)
+                        or __vlIsFirst(base) or __vlIsSecond(base)
                         or base:find("mamori", 1, true) ~= nil
-                        or base:find("Yogan3", 1, true) ~= nil
                         or base:find("timeskiptoru4", 1, true) ~= nil
                         or base:find("rintaro", 1, true) ~= nil
-                        or base:find("Yogan3", 1, true) ~= nil
-                        or base:find("timeskiptoru4", 1, true) ~= nil
-                        or name == "sanju"
                 end
 
                 -- Urutan slot prioritas seperti fase pertama.
@@ -1347,11 +1476,10 @@ do
                     local dn = def and lower(def.DisplayName) or ""
                     local base = lower(id)
                     -- Target Yogan/Sanju dan Mamori mutlak dilindungi.
-                    if base:find("mamori", 1, true) or base:find("Yogan", 1, true)
-                        or dn == "mamori" or dn == "Yogan" or dn == "sanju"
-                        or base == "rintaro"
-                        or base:find("rintaro", 1, true)
-                        or base:find("Yogan3", 1, true) then
+                    if base:find("mamori", 1, true) or dn == "mamori"
+                        or __vlIsFirst(dn) or __vlIsSecond(dn)
+                        or __vlIsFirst(base) or __vlIsSecond(base)
+                        or base:find("rintaro", 1, true) then
                         return nil, "target dilindungi"
                     end
                     -- Dicek SEBELUM knownProtected (keduanya ada di sana).
@@ -1497,14 +1625,43 @@ do
                     return true
                 end
 
-                local PITY_FILE = "VL_Sanju_Pity_Save_v166_" .. tostring(playerA.UserId) .. ".txt"
-                local PITY_TP_KEY = "VL_Sanju_Pity_Save_v166_" .. tostring(playerA.UserId)
+                local PITY_FILE = "VL_Sanju_Pity_Save_v166_" .. tostring(playerA.UserId) .. __vlConfigSuffix() .. ".txt"
+                local PITY_TP_KEY = "VL_Sanju_Pity_Save_v166_" .. tostring(playerA.UserId) .. __vlConfigSuffix()
+                local SANJU_PITY_ID = nil
+                local function getSanjuPityList()
+                    local gui = playerA:FindFirstChild("PlayerGui")
+                    local styles = gui and gui:FindFirstChild("Interface")
+                    styles = styles and styles:FindFirstChild("Lobby")
+                    styles = styles and styles:FindFirstChild("Styles")
+                    local pity = styles and styles:FindFirstChild("SecretPity")
+                    local bg = pity and (pity:FindFirstChild("BGFrame") or pity:FindFirstChild("Background"))
+                    local body = bg and bg:FindFirstChild("Body")
+                    return body and body:FindFirstChild("List")
+                end
+                local function resolveSanjuPityId()
+                    if not styleModA then
+                        local content = RSA:FindFirstChild("Content")
+                        local module = content and content:FindFirstChild("Style")
+                        if module then pcall(function() styleModA = require(module) end) end
+                    end
+                    local id, why = __vlResolveStylePityId(styleModA, SECOND_STYLE_NAME, getSanjuPityList())
+                    if id then
+                        if SANJU_PITY_ID ~= id then
+                            SANJU_PITY_ID = id
+                            twinsStatus("[ID SCANNER] Nama " .. SECOND_STYLE_NAME .. " -> ID Pity GUI " .. id)
+                        end
+                        return id
+                    end
+                    return nil, why
+                end
                 local function preferredSanju()
+                    local expected = resolveSanjuPityId()
+                    if not expected then return nil end
                     local knit = getKnit()
                     if not knit then return nil end
                     local ok, ctrl = pcall(function() return knit.GetController("StyleController") end)
                     if not ok or not ctrl or not ctrl.PreferredSecret then return nil end
-                    return readSignal(ctrl.PreferredSecret) == "Rintaro"
+                    return readSignal(ctrl.PreferredSecret) == expected
                 end
                 local function pityPending()
                     local value
@@ -1542,15 +1699,9 @@ do
                 local function selectSanjuCallback()
                     if preferredSanju() == true then return true end
                     local function findTwinsPityButton()
-                        local gui = playerA:FindFirstChild("PlayerGui")
-                        local styles = gui and gui:FindFirstChild("Interface")
-                        styles = styles and styles:FindFirstChild("Lobby")
-                        styles = styles and styles:FindFirstChild("Styles")
-                        local pity = styles and styles:FindFirstChild("SecretPity")
-                        local bg = pity and pity:FindFirstChild("Background")
-                        local body = bg and bg:FindFirstChild("Body")
-                        local list = body and body:FindFirstChild("List")
-                        return list and list:FindFirstChild("Rintaro")
+                        local list = getSanjuPityList()
+                        local id = resolveSanjuPityId()
+                        return list and id and list:FindFirstChild(id)
                     end
                     -- v1.0.47: buka menu Styles dulu agar tombol Pity terbentuk.
                     pcall(function()
@@ -1566,7 +1717,7 @@ do
                         end
                     end
                     if not btn or not btn:IsA("GuiButton") then
-                        warn("[TWINS] Tombol internal Rintaro belum tersedia.")
+                        warn("[TWINS] Tombol Pity " .. SECOND_STYLE_NAME .. " belum tersedia melalui pencarian nama.")
                         return false
                     end
                     local ups = (debug and debug.getupvalues) or getupvalues
@@ -1587,19 +1738,19 @@ do
                                         if not fired then warn("[TWINS] Callback gagal: " .. tostring(err)) end
                                         for _ = 1, 25 do
                                             if preferredSanju() == true then
-                                                print("[TWINS] Secret Pity Rintaro dikonfirmasi.")
+                                                print("[TWINS] Secret Pity " .. SECOND_STYLE_NAME .. " terkonfirmasi.")
                                                 return true
                                             end
                                             task.wait(0.2)
                                         end
-                                        warn("[TWINS] Callback dipanggil, tetapi Rintaro belum terkonfirmasi.")
+                                        warn("[TWINS] Callback dipanggil, tetapi Pity " .. SECOND_STYLE_NAME .. " belum terkonfirmasi.")
                                         return false
                                     end
                                 end
                             end
                         end
                     end
-                    warn("[TWINS] Callback asli Sanju belum ditemukan.")
+                    warn("[TWINS] Callback asli " .. SECOND_STYLE_NAME .. " belum ditemukan.")
                     return false
                 end
                 -- v1.0.50: bedakan Pity yang baru dipilih dalam sesi ini
@@ -1610,7 +1761,7 @@ do
                 local function rejoinForSanjuPity()
                     if os.clock() - lastPityTp < 15 then return end
                     lastPityTp = os.clock()
-                    print("[TWINS] Pity Sanju terpilih. REJOIN dahulu untuk menyimpan sebelum spin.")
+                    print("[TWINS] Pity " .. SECOND_STYLE_NAME .. " terpilih. REJOIN dahulu untuk menyimpan sebelum spin.")
                     local ok, err = pcall(function() TPA:Teleport(game.PlaceId, playerA) end)
                     if not ok then warn("[TWINS] Rejoin Pity ditolak: " .. tostring(err)) end
                 end
@@ -1618,41 +1769,42 @@ do
                     local pending = pityPending()
                     local chosen = preferredSanju()
                     if chosen == nil then
-                        twinsStatus("Menunggu data PreferredSecret dari game")
+                        local id, reason = resolveSanjuPityId()
+                        twinsStatus("Menunggu data Pity " .. SECOND_STYLE_NAME .. ": " .. tostring(id or reason or "controller belum siap"))
                         return false
                     end
                     if pending then
                         if chosen == true then
                             if pitySelectedThisSession then
                                 -- Pilihan dibuat pada sesi ini: rejoin sekali untuk simpan.
-                                twinsStatus("Pity Rintaro baru dipilih: menunggu rejoin penyimpanan")
+                                twinsStatus("Pity " .. SECOND_STYLE_NAME .. " baru dipilih: menunggu rejoin penyimpanan")
                                 rejoinForSanjuPity()
                                 return false
                             end
                             -- Penanda berasal dari sesi sebelumnya. Tetap sah
                             -- meskipun rejoin masuk kembali ke JobId yang sama.
                             clearPityPending()
-                            twinsStatus("Pity Rintaro terkonfirmasi setelah rejoin; lanjut spin")
+                            twinsStatus("Pity " .. SECOND_STYLE_NAME .. " terkonfirmasi setelah rejoin; lanjut spin")
                             return true
                         end
                         -- Pilihan belum tersimpan/berubah: jangan teleport loop.
                         clearPityPending()
-                        twinsStatus("Pity Rintaro belum terkonfirmasi; pilih ulang")
+                        twinsStatus("Pity " .. SECOND_STYLE_NAME .. " belum terkonfirmasi; pilih ulang")
                     end
                     if chosen == true then
                         return true
                     end
                     if not selectSanjuCallback() then
-                        twinsStatus("Tombol/callback Secret Pity Rintaro belum siap; ulang otomatis")
+                        twinsStatus("Tombol/callback Secret Pity " .. SECOND_STYLE_NAME .. " belum siap; ulang otomatis")
                         return false
                     end
                     if not writePityPending() then
-                        twinsStatus("Gagal menyimpan penanda rejoin Sanju: spin ditunda")
+                        twinsStatus("Gagal menyimpan penanda rejoin " .. SECOND_STYLE_NAME .. ": spin ditunda")
                         warn("[TWINS] Gagal menulis penanda lokal; spin dibatalkan.")
                         return false
                     end
                     pitySelectedThisSession = true
-                    twinsStatus("Pity Rintaro dipilih: rejoin penyimpanan")
+                    twinsStatus("Pity " .. SECOND_STYLE_NAME .. " dipilih: rejoin penyimpanan")
                     rejoinForSanjuPity()
                     return false
                 end
@@ -1707,7 +1859,7 @@ do
                         if owned ~= false then return false end
                     end
                     if preferredSanju() ~= true then
-                        twinsStatus("Pity belum Rintaro: rollback ditunda")
+                        twinsStatus("Pity belum sesuai target " .. SECOND_STYLE_NAME .. ": rollback ditunda")
                         return false
                     end
                     local knit = getKnit()
@@ -1727,9 +1879,9 @@ do
                     twinsRollbackInFlight = true
                     twinsStatus((twinsLuckyCapReached()
                         and ("Batas " .. tostring(twinsBudget.limit())
-                            .. " Lucky Sanju tercapai, saldo=" .. tostring(remaining))
+                            .. " Lucky " .. SECOND_STYLE_NAME .. " tercapai, saldo=" .. tostring(remaining))
                         or "Lucky habis (0)")
-                        .. ", Sanju belum ada: ROLLBACK seperti Yogan")
+                        .. ", " .. SECOND_STYLE_NAME .. " belum ada: ROLLBACK seperti " .. FIRST_STYLE_NAME)
                     local ok, err = pcall(function()
                         local remote = RSA:WaitForChild("Packages")
                             :WaitForChild("_Index")
@@ -1759,7 +1911,7 @@ do
                     end)
                 end
                 local function resultIsSanju(x)
-                    if type(x) == "string" then return x:lower() == "rintaro" or getStyleName(x) == "sanju" end
+                    if type(x) == "string" then return __vlIsSecond(x) or __vlIsSecond(getStyleName(x)) end
                     if type(x) == "table" then
                         for _, k in ipairs({"Id", "Style", "StyleId"}) do
                             if resultIsSanju(x[k]) then return true end
@@ -1784,7 +1936,7 @@ do
                     return tostring(x)
                 end
                 local function twinsDone()
-                    publishHistory("STYLE", "Sanju", true)
+                    publishHistory("STYLE", SECOND_STYLE_NAME, true)
                     twinsBudget.resetAfterSuccess()
                     finishToZero()
                     notifyFinal(true)
@@ -1803,7 +1955,7 @@ do
                     if available ~= false then return false end
                     twinsFinished = true
                     finishToZero()
-                    twinsStatus("STOP Sanju: tidak ada slot aman. Webhook final Yogan saja. "
+                    twinsStatus("STOP " .. SECOND_STYLE_NAME .. ": tidak ada slot aman. Webhook final " .. FIRST_STYLE_NAME .. " saja. "
                         .. tostring(detail or reason))
                     notifyFinal(false, "NO_SLOT_SANJU")
                     return true
@@ -1829,7 +1981,7 @@ do
                 local function runTwinsSpin()
                     if twinsStarted or twinsRollbackInFlight then return end
                     twinsStarted = true
-                    twinsStatus("Memulai Sanju worker")
+                    twinsStatus("Memulai " .. SECOND_STYLE_NAME .. " worker")
                     local ctrl, rollRF, selectRF
                     local lastContextStatus = -100
                     while playerA.Parent do
@@ -1859,12 +2011,13 @@ do
                         or batasTsoEvent == "RESET_AFTER_ROLLBACK" then
                         twinsStatus("Jatah TWINS: " .. tostring(twinsBudget.limit())
                             .. " dari saldo " .. tostring(saldoTsoAwal)
-                            .. " (seluruh sisa Yogan jika <=29, maksimal 30 lainnya)")
+                            .. " (batas fase 2 " .. tostring(MAX_LUCKY_STYLE_2)
+                            .. "; total dua style maksimal " .. tostring(MAX_LUCKY_TOTAL) .. ")")
                     end
                     observeTwinsLucky(saldoTsoAwal)
                     local twinsBefore = hasSanju()
                     if twinsBefore == nil then
-                        twinsStatus("Inventory Sanju belum siap; tunggu sinkronisasi")
+                        twinsStatus("Inventory " .. SECOND_STYLE_NAME .. " belum siap; tunggu sinkronisasi")
                         return
                     end
                     -- Cek sebelum komit Lucky, pemilihan Pity, rejoin, atau rollback.
@@ -1875,7 +2028,7 @@ do
                             twinsStatus("Status slot berubah saat konfirmasi; periksa ulang")
                             return
                         elseif available == nil then
-                            twinsStatus("Menunggu kepastian slot Sanju: " .. tostring(detail))
+                            twinsStatus("Menunggu kepastian slot " .. SECOND_STYLE_NAME .. ": " .. tostring(detail))
                             return
                         end
                     end
@@ -1886,7 +2039,7 @@ do
                     local luckyAtStart = readSignal(ctrl.LuckySpins)
                     if twinsBefore == false then
                         if type(luckyAtStart) ~= "number" then
-                            twinsStatus("Lucky awal Sanju belum terbaca; jangan spin dulu")
+                            twinsStatus("Lucky awal " .. SECOND_STYLE_NAME .. " belum terbaca; jangan spin dulu")
                             return
                         end
                         if not toZeroWasCommitted() then
@@ -1900,7 +2053,8 @@ do
                             end
                             if not commitToZero(luckyAtStart) then return end
                             twinsStatus("Lucky AWAL GAME INI " .. tostring(luckyAtStart)
-                                .. " (>=4): lanjut sampai 0 / maksimal 30;"
+                                .. " (>=4): lanjut sampai 0 / maksimal "
+                                .. tostring(MAX_TWINS_LUCKY_SPENT) .. ";"
                                 .. " tidak diwariskan ke game berikutnya")
                         else
                             twinsStatus("Lanjut keputusan game INI: Lucky awal "
@@ -1911,7 +2065,7 @@ do
                     end
                     if twinsBefore == false and toZeroWasCommitted()
                         and not readyAfterSanjuPityRejoin() then
-                        twinsStatus("Menunggu pemilihan Secret Pity Sanju / rejoin")
+                        twinsStatus("Menunggu pemilihan Secret Pity " .. SECOND_STYLE_NAME .. " / rejoin")
                         return
                     end
                     local dupOK, dupWhy = true, nil
@@ -1922,15 +2076,15 @@ do
                     if dupOK == false then
                         if dupWhy == "LUCKY_CAP" or twinsLuckyCapReached() then
                             twinsRollbackOrNoSlot("Batas " .. tostring(twinsBudget.limit())
-                                .. " Lucky Sanju saat pembersihan duplikat")
+                                .. " Lucky " .. SECOND_STYLE_NAME .. " saat pembersihan duplikat")
                             return
                         end
-                        twinsStatus("Duplikat Yogan belum tuntas: " .. tostring(dupWhy))
+                        twinsStatus("Duplikat " .. FIRST_STYLE_NAME .. " belum tuntas: " .. tostring(dupWhy))
                         return
                     end
                     if hasSanju() == true then
-                        twinsStatus("Sanju sudah dimiliki: STOP")
-                        print("[TWINS] Sanju sudah dimiliki; tidak perlu spin.")
+                        twinsStatus(SECOND_STYLE_NAME .. " sudah dimiliki: STOP")
+                        print("[TWINS] " .. SECOND_STYLE_NAME .. " sudah dimiliki; tidak perlu spin.")
                         twinsDone()
                         return
                     end
@@ -1944,20 +2098,20 @@ do
                     -- Tidak ada pemeriksaan ulang ambang 4 di sini.
                     -- Komit GO sudah dibuat sebelum pembersihan duplikat.
                     if not readyAfterSanjuPityRejoin() then
-                        twinsStatus("Menunggu Sanju Pity / rejoin penyimpanan")
+                        twinsStatus("Menunggu " .. SECOND_STYLE_NAME .. " Pity / rejoin penyimpanan")
                         twinsStarted = false
                         return
                     end
                     if lucky <= 0 or twinsLuckyCapReached() then
                         twinsStatus(twinsLuckyCapReached()
                             and ("Batas " .. tostring(twinsBudget.limit())
-                                .. " Lucky Sanju tercapai: ROLLBACK")
-                            or "Lucky 0, pencarian Sanju AKTIF: ROLLBACK seperti Yogan")
+                                .. " Lucky " .. SECOND_STYLE_NAME .. " tercapai: ROLLBACK")
+                            or "Lucky 0, pencarian " .. SECOND_STYLE_NAME .. " AKTIF: ROLLBACK seperti " .. FIRST_STYLE_NAME)
                         twinsRollbackOrNoSlot()
                         return
                     end
                     if twinsLuckyPendingBefore then
-                        twinsStatus("Menunggu konfirmasi Lucky Sanju sebelumnya; tahan spin baru")
+                        twinsStatus("Menunggu konfirmasi Lucky " .. SECOND_STYLE_NAME .. " sebelumnya; tahan spin baru")
                         return
                     end
 
@@ -1984,11 +2138,11 @@ do
                         observeTwinsLucky(currentBudgetLucky)
                         if twinsLuckyCapReached() then
                             twinsRollbackOrNoSlot(tostring(twinsBudget.limit())
-                                .. " Lucky Sanju sudah digunakan")
+                                .. " Lucky " .. SECOND_STYLE_NAME .. " sudah digunakan")
                             return
                         end
                         if twinsLuckyPendingBefore then
-                            twinsStatus("Menunggu saldo Lucky Sanju terkonfirmasi sebelum spin lain")
+                            twinsStatus("Menunggu saldo Lucky " .. SECOND_STYLE_NAME .. " terkonfirmasi sebelum spin lain")
                             return
                         end
                         -- Selama spin Sanju, JANGAN bersihkan duplikat Yogan.
@@ -1996,7 +2150,7 @@ do
                         do
                             local twins = hasSanju()
                             if twins == true then
-                                twinsStatus("Sanju ditemukan! STOP")
+                                twinsStatus(SECOND_STYLE_NAME .. " ditemukan! STOP")
                                 twinsDone()
                                 return
                             elseif twins == nil then
@@ -2010,8 +2164,8 @@ do
                                     -- Sama seperti Mamori: tunggu 1 detik, cek, baru rollback.
                                     twinsStatus(twinsLuckyCapReached()
                                         and (tostring(twinsBudget.limit())
-                                            .. " Lucky Sanju digunakan, cek Sanju sebelum rollback")
-                                        or "Lucky habis, cek Sanju")
+                                            .. " Lucky " .. SECOND_STYLE_NAME .. " digunakan, cek " .. SECOND_STYLE_NAME .. " sebelum rollback")
+                                        or "Lucky habis, cek " .. SECOND_STYLE_NAME)
                                     task.wait(1)
                                     twinsRollbackOrNoSlot()
                                     return
@@ -2032,7 +2186,7 @@ do
                                         if slotFails >= 10 then return end
                                         task.wait(1)
                                     elseif preferredSanju() ~= true then
-                                        twinsStatus("STOP: Pity bukan Rintaro")
+                                        twinsStatus("STOP: Pity bukan target " .. SECOND_STYLE_NAME)
                                         twinsStarted = false
                                         return
                                     else
@@ -2052,18 +2206,18 @@ do
                                             if resultIsSanju(a) or resultIsSanju(b) then
                                                 -- v1.0.48: balasan remote TIDAK dipercaya sendirian.
                                                 -- Wajib terkonfirmasi di inventori (maks 6 detik).
-                                                twinsStatus("Remote menyebut Sanju; konfirmasi inventori...")
+                                                twinsStatus("Remote menyebut " .. SECOND_STYLE_NAME .. "; konfirmasi inventori...")
                                                 local confirmed = false
                                                 for _ = 1, 30 do
                                                     if hasSanju() == true then confirmed = true; break end
                                                     task.wait(0.2)
                                                 end
                                                 if confirmed then
-                                                    twinsStatus("Sanju TERKONFIRMASI di inventori! STOP")
+                                                    twinsStatus(SECOND_STYLE_NAME .. " TERKONFIRMASI di inventori! STOP")
                                                     twinsDone()
                                                     return
                                                 end
-                                                twinsStatus("Remote menyebut Sanju tapi TIDAK ada di inventori: diabaikan, lanjut")
+                                                twinsStatus("Remote menyebut " .. SECOND_STYLE_NAME .. " tapi TIDAK ada di inventori: diabaikan, lanjut")
                                             end
                                             for _ = 1, 25 do
                                                 local afterLucky = readSignal(ctrl.LuckySpins)
@@ -2076,7 +2230,7 @@ do
                                                 task.wait(0.2)
                                             end
                                             if twinsLuckyPendingBefore then
-                                                twinsStatus("Saldo Lucky belum berubah setelah roll Sanju;"
+                                                twinsStatus("Saldo Lucky belum berubah setelah roll " .. SECOND_STYLE_NAME .. ";"
                                                     .. " tahan spin agar jatah tidak terlewati")
                                                 return
                                             end
@@ -2107,6 +2261,8 @@ do
                 -- v1.0.68: popup muncul sekali per sesi saat akun memiliki
                 -- Yogan + Sanju (juga setelah rejoin). Tidak terkait webhook.
                 task.spawn(function()
+                    -- Mode satu style tidak memeriksa target fase kedua.
+                    if not SPIN_TWO_STYLES then return end
                     while playerA.Parent do
                         local okTwins, twinsOwned = pcall(hasSanju)
                         if okTwins and twinsOwned == true and hasFirstTarget() == true then
@@ -2128,7 +2284,7 @@ do
                         local stage = readStage()
                         local level = playerA:GetAttribute("User_Level")
                         local originNow = readPendingOrigin()
-                        local gate = "Yogan=" .. tostring(mamori)
+                        local gate = FIRST_STYLE_NAME .. "=" .. tostring(mamori)
                             .. " | Level=" .. tostring(level)
                             .. " | StageROLL=" .. tostring(stage)
                             .. " | SavePending=" .. tostring(originNow ~= nil)
@@ -2140,14 +2296,15 @@ do
                     if mamori ~= nil then
                         if initialFirstTarget == nil then initialFirstTarget = mamori end
                         if mamori then
-                            publishHistory("STYLE", "Yogan", true)
+                            publishHistory("STYLE", FIRST_STYLE_NAME, true)
                             local origin = readPendingOrigin()
                             local mayProceed = false
                             if origin then
                                 if origin ~= tostring(game.JobId) then
                                     clearPendingOrigin()
                                     mayProceed = true
-                                    twinsStatus("Yogan tersimpan setelah rejoin; lanjut Sanju")
+                                    twinsStatus(FIRST_STYLE_NAME .. " tersimpan setelah rejoin; "
+                                        .. (SPIN_TWO_STYLES and ("lanjut " .. SECOND_STYLE_NAME) or "mode satu style SELESAI"))
                                 elseif initialFirstTarget == true then
                                     clearPendingOrigin()
                                     mayProceed = true
@@ -2158,16 +2315,25 @@ do
                                 task.wait(0.6)
                                 if hasFirstTarget() == true then
                                     markPendingOrigin()
-                                    twinsStatus("Yogan baru terdeteksi: rejoin penyimpanan")
+                                    twinsStatus(FIRST_STYLE_NAME .. " baru terdeteksi: rejoin penyimpanan")
                                     requestSaveRejoin()
                                 end
                             else
                                 mayProceed = true
                             end
                             if mayProceed then
-                                if not twinsLaunched and not twinsFinished then
-                                    -- Worker Pity sendiri memvalidasi pilihan dan
-                                    -- rejoin; jangan blokir berdasarkan JobId.
+                                if not SPIN_TWO_STYLES then
+                                    -- Target pertama sudah tersimpan. Jangan pernah mulai
+                                    -- worker/pity/slot fase kedua pada mode solo.
+                                    if not twinsFinished then
+                                        twinsFinished = true
+                                        twinsStatus("MODE SATU STYLE: " .. FIRST_STYLE_NAME
+                                            .. " terkonfirmasi; Style 2 dinonaktifkan. SELESAI")
+                                        pcall(showPopup, FIRST_STYLE_NAME)
+                                        notifyFinal(false, "SINGLE_STYLE_DONE")
+                                    end
+                                elseif not twinsLaunched and not twinsFinished then
+                                    -- Mode dua style: alur asli v1.0.78 tidak diubah.
                                     twinsLaunched = true
                                     runTwinsWithRecovery()
                                 end
@@ -2180,7 +2346,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[Yogan + SANJU v1.0.69] Percobaan "
+                warn("[STYLE v1.0.81-LUCKY-15-15] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2192,14 +2358,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.73-SANJU-SLOT-LOCK] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.81-LUCKY-15-15] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.73-SANJU-SLOT-LOCK] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.81-LUCKY-15-15] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -5812,7 +5978,7 @@ for attempt = 1, 3 do
             pcall(function() writefile("xyn_compile_error.txt", tostring(compileErr)) end)
         end
         warn("[LEVEL BOOT] " .. lastBootError)
-        bootReport("COMPILE ERROR - cek debug Yogan")
+        bootReport("COMPILE ERROR - cek debug " .. FIRST_STYLE_NAME)
     else
         local ok, runErr = pcall(fn)
         if ok then
@@ -5941,10 +6107,10 @@ do
         -- Simpan lintas rejoin agar snapshot hasil spin tidak dianggap slot awal.
         local phase1Env = (typeof(getgenv) == "function" and getgenv()) or _G
         local phase1Uid = tostring(player.UserId)
-        local phase1SlotKey = "VL_TWINS_PHASE1_SELECTED_SLOT_v175_" .. phase1Uid
+        local phase1SlotKey = "VL_TWINS_PHASE1_SELECTED_SLOT_v175_" .. phase1Uid .. __vlConfigSuffix()
         local phase1SlotFile = phase1SlotKey .. ".txt"
-        local phase1JobKey = "__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. phase1Uid
-        local phase1ActiveKey = "__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. phase1Uid
+        local phase1JobKey = "__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. phase1Uid .. __vlConfigSuffix()
+        local phase1ActiveKey = "__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. phase1Uid .. __vlConfigSuffix()
 
         local function decodePhase1Slot(value)
             if type(value) ~= "string" then return nil end
@@ -6032,7 +6198,7 @@ do
         local function isTargetDisplay(id)
             local def = getDef(id)
             return def and type(def.DisplayName) == "string"
-                and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "Yogan" or false
+                and __vlIsFirst(def.DisplayName) or false
         end
 
         -- Kumpulan contoh untuk MEMBACA rarity dari modul game, bukan hardcode
@@ -6048,7 +6214,9 @@ do
             kishoti=true, yachikusai=true}
         local knownSecret = {mamori=true, sanju=true, timeskiptoru4=true, ["timeskip okazu"]=true, kisuki=true, kazana=true,
             hidari=true, yogan=true, feiko=true, ibara=true, kumo=true,
-            kijo=true, kijo3=true, Yogan3=true, rintaro=true, ["Yogan"]=true, ["sanju"]=true, mikage=true, taichou=true}
+            kijo=true, kijo3=true, rintaro=true, ["yogan"]=true, ["sanju"]=true, mikage=true, taichou=true}
+        knownSecret[__vlNormalizeStyleName(FIRST_STYLE_NAME)] = true
+        knownSecret[__vlNormalizeStyleName(SECOND_STYLE_NAME)] = true
         local knownUltra = {hakka=true, akari=true, ronin=true}
         local knownEvo = {encho=true}
 
@@ -6101,7 +6269,7 @@ do
         local function classification(id, rarity, map, counts)
             local n = lower(id)
             -- ID utama tidak pernah dipilih sebagai slot pengganti.
-            if isTargetDisplay(id) then return "TERLINDUNGI", "target Yogan" end
+            if isTargetDisplay(id) then return "TERLINDUNGI", "target " .. FIRST_STYLE_NAME end
 
             -- ID pengecualian hanya Kimiro (Kisuki sementara); Rintaro/Sanju dilindungi.
             -- Pengecualian harus ditentukan sebelum rarity Secret dicek.
@@ -6188,7 +6356,7 @@ do
             return table.concat(signature, "|")
         end
         local envNoSlot = (typeof(getgenv) == "function" and getgenv()) or _G
-        envNoSlot["__VL_FIRST_THE_TWINS_ALL_PROTECTED_" .. tostring(player.UserId)] =
+        envNoSlot["__VL_FIRST_THE_TWINS_ALL_PROTECTED_" .. tostring(player.UserId) .. __vlConfigSuffix()] =
             allMamoriSlotsProtectedSnapshot
 
         local function selectSafeStyle()
@@ -6272,7 +6440,7 @@ do
                     return false
                 end
                 if active == lockedSlot then
-                    commitPhase1Slot(lockedSlot, "lanjut fase Yogan; hasil sekarang=" .. id)
+                    commitPhase1Slot(lockedSlot, "lanjut fase " .. FIRST_STYLE_NAME .. "; hasil sekarang=" .. id)
                     return true
                 end
                 if not selectSlotRF then
@@ -6352,10 +6520,10 @@ do
                     if second and first == second then
                         local env = (typeof(getgenv) == "function" and getgenv()) or _G
                         local uid = tostring(player.UserId)
-                        env["__VL_FIRST_THE_TWINS_NO_SLOT_" .. uid] = true
-                        print("[STYLE] STOP Yogan: semua slot terlindungi;"
+                        env["__VL_FIRST_THE_TWINS_NO_SLOT_" .. uid .. __vlConfigSuffix()] = true
+                        print("[STYLE] STOP " .. FIRST_STYLE_NAME .. ": semua slot terlindungi;"
                             .. " kirim webhook final berisi semua style langka.")
-                        local notifier = env["__VL_FINAL_NOTIFY_" .. uid]
+                        local notifier = env["__VL_FINAL_NOTIFY_" .. uid .. __vlConfigSuffix()]
                         if type(notifier) == "function" then
                             pcall(notifier, false, "NO_SLOT_FIRST_THE_TWINS")
                         end
@@ -6586,13 +6754,13 @@ do
         -- Ini hanya diagnosis; tidak mengubah fungsi print skrip utama.
         LogBoot.MessageOut:Connect(function(msg)
             if type(msg) ~= "string" then return end
-            if msg:find("[AutoSpin] Yogan belum ditemukan -> lanjut", 1, true) then
+            if msg:find("[AutoSpin] " .. FIRST_STYLE_NAME .. " belum ditemukan -> lanjut", 1, true) then
                 mainStartAt = os.clock()
             elseif msg:find("[AutoSpin] Rarity:", 1, true) then
                 mainDidRoll = true
             elseif msg:find("[AutoSpin] STOP TOTAL - TANPA ROLLBACK", 1, true) then
                 mainStoppedEarly = true
-            elseif msg:find("[AutoSpin] Yogan tidak terdeteksi -> rollback", 1, true) then
+            elseif msg:find("[AutoSpin] " .. FIRST_STYLE_NAME .. " tidak terdeteksi -> rollback", 1, true) then
                 rollbackStarted = true
             end
         end)
@@ -6628,7 +6796,7 @@ do
             for _, id in pairs(list) do
                 local success, data = pcall(function() return definitions:Get(id) end)
                 if success and data and type(data.DisplayName) == "string"
-                    and data.DisplayName:match("^%s*(.-)%s*$"):lower() == "Yogan" then
+                    and __vlIsFirst(data.DisplayName) then
                     return true
                 end
             end
@@ -6697,10 +6865,10 @@ do
                 local owned = isOwned(getKnit())
                 if owned == true and elapsed >= 5 and not guardClicked then
                     -- Jika sudah memutar roll, jangan mengklik tiba-tiba.
-                    if not mainDidRoll and clickCenter("Yogan sudah dimiliki") then
+                    if not mainDidRoll and clickCenter(FIRST_STYLE_NAME .. " sudah dimiliki") then
                         task.wait(1)
                         for attempt = 1, 12 do
-                            if openStyles("jalur Yogan sudah dimiliki") then break end
+                            if openStyles("jalur " .. FIRST_STYLE_NAME .. " sudah dimiliki") then break end
                             task.wait(0.5)
                         end
                     end
@@ -6792,19 +6960,19 @@ local Http = game:GetService("HttpService")
 local Player = Players.LocalPlayer
 local Knit = require(RS.Packages.Knit)
 
-local TARGET = "Yogan"
-local FLAG = "auto_style_pure_TheTwins_v166.flag"
+local TARGET = FIRST_STYLE_NAME
+local FLAG = "auto_style_pure_TheTwins_v166" .. __vlConfigSuffix() .. ".flag"
 
 local StyleMod, StyleService, StyleCtrl
 local TeamSel
 local running = true
 local targetFound = false
 
--- v1.0.54: maksimum 30 Lucky Yogan per siklus rollback,
--- termasuk jika rejoin terjadi sebelum 30 Lucky terpakai.
-local MAX_MAMORI_LUCKY_SPENT = 30
+-- Batas fase pertama: maksimal 15 Lucky (dua style) atau 30 Lucky (satu style).
+-- Budget tetap dihitung lintas rejoin dan direset setelah rollback terkonfirmasi.
+local MAX_MAMORI_LUCKY_SPENT = MAX_LUCKY_STYLE_1
 local mamoriBudget = makePersistentLuckyBudget(
-    Player.UserId, "THE_TWINS_FIRST", MAX_MAMORI_LUCKY_SPENT)
+    Player.UserId, "THE_TWINS_FIRST" .. __vlConfigSuffix(), MAX_MAMORI_LUCKY_SPENT)
 local mamoriLuckyPendingBefore = nil
 local mamoriLuckyPendingSince = nil
 local lastFirstTargetPendingLog = -100
@@ -6817,8 +6985,17 @@ local function mamoriWatch(message)
     -- LogService.MessageOut sudah menjembatani log ini ke panel TWINS.
     -- Jangan kirim langsung lagi ke sink yang sama (menjadi duplikat).
 end
-print("[AutoSpin] Budget Lucky Yogan: " .. tostring(mamoriBudget.spent())
-    .. "/" .. tostring(mamoriBudget.limit())
+local function firstLuckyLimitLabel()
+    -- Mode 1 style: maksimal 30.
+    -- Mode 2 style: maksimal 15 untuk fase pertama (15 untuk fase kedua).
+    return tostring(mamoriBudget.limit())
+end
+local function firstLuckyCapReached()
+    -- Mode solo maksimal 30; mode dua style maksimal 15 untuk fase pertama.
+    return mamoriBudget.capped()
+end
+print("[AutoSpin] Budget Lucky " .. FIRST_STYLE_NAME .. ": " .. tostring(mamoriBudget.spent())
+    .. "/" .. firstLuckyLimitLabel()
     .. " (tersimpan lintas rejoin); rollback pending="
     .. tostring(mamoriBudget.isRollbackPending()))
 local function observeFirstTargetLucky(balance)
@@ -6826,15 +7003,15 @@ local function observeFirstTargetLucky(balance)
     local used, event = mamoriBudget.observe(balance)
     if event == "LIMIT_INIT" or event == "INIT"
         or event == "RESET_AFTER_ROLLBACK" then
-        mamoriWatch("Jatah Yogan aktif " .. tostring(mamoriBudget.limit())
-            .. "/30 (Lucky saat mulai=" .. tostring(balance) .. ")")
+        mamoriWatch("Jatah " .. FIRST_STYLE_NAME .. " aktif " .. firstLuckyLimitLabel()
+            .. " (Lucky saat mulai=" .. tostring(balance) .. ")")
     end
     if event == "RESET_AFTER_ROLLBACK" then
-        print("[AutoSpin] Rollback Yogan terdeteksi: saldo Lucky pulih;"
-            .. " budget baru 0/" .. tostring(mamoriBudget.limit()))
+        print("[AutoSpin] Rollback " .. FIRST_STYLE_NAME .. " terdeteksi: saldo Lucky pulih;"
+            .. " budget baru 0/" .. firstLuckyLimitLabel())
     elseif used > before then
-        print("[AutoSpin] Lucky Yogan terpakai:", used,
-            "/" .. tostring(mamoriBudget.limit()), "saldo:", balance)
+        print("[AutoSpin] Lucky " .. FIRST_STYLE_NAME .. " terpakai:", used,
+            "/" .. firstLuckyLimitLabel(), "saldo:", balance)
     end
     if mamoriLuckyPendingBefore and type(balance) == "number"
         and balance < mamoriLuckyPendingBefore then
@@ -6918,8 +7095,8 @@ local function equippedStyle()
 end
 
 -- CACHE KEPEMILIKAN Yogan (TARGET 1) PER AKUN (dipercaya tanpa menunggu Style dimuat)
-local OWNED_FILE = "VL_TheTwins_Owned_" .. tostring(Player.UserId) .. ".flag"
-local OWNED_KEY = "__VL_THE_TWINS_OWNED_" .. tostring(Player.UserId)
+local OWNED_FILE = __vlFirstOwnedFile(Player.UserId)
+local OWNED_KEY = __vlFirstOwnedKey(Player.UserId)
 local cacheEnv = (typeof(getgenv) == "function" and getgenv()) or _G
 local function ownedFromCache()
     if cacheEnv[OWNED_KEY] == true then return true end
@@ -6928,7 +7105,7 @@ local function ownedFromCache()
         if typeof(isfile) == "function" and not isfile(OWNED_FILE) then return nil end
         return readfile(OWNED_FILE)
     end)
-    if ok and data == "THE_TWINS_OWNED" then
+    if ok and data == __vlFirstOwnedToken() then
         cacheEnv[OWNED_KEY] = true
         return true
     end
@@ -6937,7 +7114,7 @@ end
 local function rememberFirstTarget()
     cacheEnv[OWNED_KEY] = true
     if typeof(writefile) == "function" then
-        pcall(function() writefile(OWNED_FILE, "THE_TWINS_OWNED") end)
+        pcall(function() writefile(OWNED_FILE, __vlFirstOwnedToken()) end)
     end
 end
 
@@ -6960,13 +7137,9 @@ local function hasFirstTargetStyle()
 
         if type(styles) == "table" and StyleMod then
             for _, id in pairs(styles) do
-                if type(id) == "string" and id:lower() == "Yogan3" then
-                    found = true
-                    break
-                end
                 local okDef, def = pcall(function() return StyleMod:Get(id) end)
                 if okDef and def and type(def.DisplayName) == "string"
-                    and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "Yogan" then
+                    and __vlIsFirst(def.DisplayName) then
                     found = true
                     break
                 end
@@ -6988,23 +7161,23 @@ local function stopFirstTargetIfNoSafeSlot()
     local uid = tostring(Player.UserId)
     -- Pemilihan slot aman sudah dikunci pada awal fase Yogan.
     -- Hindari NO_SLOT jika Sanju/Secret/Ultra/Evo muncul pada slot ROLL itu.
-    if cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. uid] == game.JobId
-        and type(cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. uid]) == "number" then
+    if cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. uid .. __vlConfigSuffix()] == game.JobId
+        and type(cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. uid .. __vlConfigSuffix()]) == "number" then
         return false
     end
-    local checker = cacheEnv["__VL_FIRST_THE_TWINS_ALL_PROTECTED_" .. uid]
+    local checker = cacheEnv["__VL_FIRST_THE_TWINS_ALL_PROTECTED_" .. uid .. __vlConfigSuffix()]
     if type(checker) ~= "function" then return false end
     local ok, first = pcall(checker)
     if not ok or type(first) ~= "string" then return false end
     task.wait(0.4)
     local ok2, second = pcall(checker)
     if not ok2 or first ~= second or hasFirstTargetStyle() then return false end
-    cacheEnv["__VL_FIRST_THE_TWINS_NO_SLOT_" .. uid] = true
-    local notifier = cacheEnv["__VL_FINAL_NOTIFY_" .. uid]
+    cacheEnv["__VL_FIRST_THE_TWINS_NO_SLOT_" .. uid .. __vlConfigSuffix()] = true
+    local notifier = cacheEnv["__VL_FINAL_NOTIFY_" .. uid .. __vlConfigSuffix()]
     if type(notifier) == "function" then
         pcall(notifier, false, "NO_SLOT_FIRST_THE_TWINS")
     end
-    print("[AutoSpin] Semua slot Yogan terlindungi -> STOP dan webhook")
+    print("[AutoSpin] Semua slot " .. FIRST_STYLE_NAME .. " terlindungi -> STOP dan webhook")
     running = false
     clearFlag()
     return true
@@ -7014,10 +7187,10 @@ local function stopSuccess()
     rememberFirstTarget()
     -- Hanya setelah Yogan berhasil: lock fase 1 tidak boleh terbawa
     -- ke siklus baru. Mekanisme pemilihan slot Sanju tetap tidak diubah.
-    local phaseKey = "VL_TWINS_PHASE1_SELECTED_SLOT_v175_" .. tostring(Player.UserId)
+    local phaseKey = "VL_TWINS_PHASE1_SELECTED_SLOT_v175_" .. tostring(Player.UserId) .. __vlConfigSuffix()
     cacheEnv[phaseKey] = nil
-    cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. tostring(Player.UserId)] = nil
-    cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. tostring(Player.UserId)] = nil
+    cacheEnv["__VL_TWINS_PHASE1_SLOT_JOB_v175_" .. tostring(Player.UserId) .. __vlConfigSuffix()] = nil
+    cacheEnv["__VL_TWINS_PHASE1_SLOT_ACTIVE_v175_" .. tostring(Player.UserId) .. __vlConfigSuffix()] = nil
     if typeof(delfile) == "function" then
         pcall(function()
             local filename = phaseKey .. ".txt"
@@ -7030,10 +7203,10 @@ local function stopSuccess()
     running = false
     clearFlag()
 
-    print("[AutoSpin] Yogan SUDAH DIDAPATKAN")
+    print("[AutoSpin] " .. FIRST_STYLE_NAME .. " SUDAH DIDAPATKAN")
     print("[AutoSpin] STOP TOTAL - TANPA ROLLBACK")
 
-    notify("Yogan didapat! AutoSpin berhenti.")
+    notify(FIRST_STYLE_NAME .. " didapat! AutoSpin berhenti.")
 end
 
 -- CEK SEBELUM MENJALANKAN SCRIPT
@@ -7042,8 +7215,8 @@ if hasFirstTargetStyle() then
     return
 end
 
-print("[AutoSpin] Yogan belum ditemukan -> lanjut")
-notify("AutoSpin aktif - target Yogan")
+print("[AutoSpin] " .. FIRST_STYLE_NAME .. " belum ditemukan -> lanjut")
+notify("AutoSpin aktif - target " .. FIRST_STYLE_NAME)
 
 task.wait(5)
 
@@ -7080,18 +7253,42 @@ end)
 
 task.wait(1)
 
--- STYLE PITY FASE 1 (Yogan = Yogan3)
+-- STYLE PITY FASE 1 (ID ditemukan dari nama Yogan pada data game)
 -- Tidak ada spin Yogan sebelum PreferredSecret benar dan pilihan tersimpan.
 -- Setelah memilih Pity baru, lakukan rejoin, lalu cek ulang pada sesi berikutnya.
-local FIRST_PITY_ID = "Yogan3"
-local firstPityFile = "VL_TheTwinsFirst_Pity_v166_" .. tostring(Player.UserId) .. ".txt"
-local firstPityKey = "VL_TheTwinsFirst_Pity_v166_" .. tostring(Player.UserId)
+local FIRST_PITY_ID = nil
+local function getFirstPityList()
+    local gui = Player:FindFirstChild("PlayerGui")
+    local interface = gui and gui:FindFirstChild("Interface")
+    local lobby = interface and interface:FindFirstChild("Lobby")
+    local styles = lobby and lobby:FindFirstChild("Styles")
+    local secret = styles and styles:FindFirstChild("SecretPity")
+    local bg = secret and (secret:FindFirstChild("BGFrame") or secret:FindFirstChild("Background"))
+    local body = bg and bg:FindFirstChild("Body")
+    return body and body:FindFirstChild("List")
+end
+local function resolveFirstPityId()
+    local id, why = __vlResolveStylePityId(StyleMod, TARGET, getFirstPityList())
+    if id then
+        if FIRST_PITY_ID ~= id then
+            FIRST_PITY_ID = id
+            print("[ID SCANNER] Nama " .. TARGET .. " -> ID Pity GUI " .. id)
+        end
+        return id
+    end
+    -- Tidak memakai ID manual sebagai fallback.
+    return nil, why
+end
+local firstPityFile = "VL_TheTwinsFirst_Pity_v166_" .. tostring(Player.UserId) .. __vlConfigSuffix() .. ".txt"
+local firstPityKey = "VL_TheTwinsFirst_Pity_v166_" .. tostring(Player.UserId) .. __vlConfigSuffix()
 local function preferredFirstPity()
+    local expected = resolveFirstPityId()
+    if not expected then return nil end
     local ok, v = pcall(function()
         return StyleCtrl.PreferredSecret and __vlReadCell(StyleCtrl.PreferredSecret)
     end)
     if not ok or not StyleCtrl.PreferredSecret then return nil end
-    return v == FIRST_PITY_ID
+    return v == expected
 end
 local function firstPityPending()
     local value = nil
@@ -7125,15 +7322,9 @@ local function clearFirstPityPending()
     pcall(function() TeleportService:SetTeleportSetting(firstPityKey, "") end)
 end
 local function findFirstPityButton()
-    local gui = Player:FindFirstChild("PlayerGui")
-    local interface = gui and gui:FindFirstChild("Interface")
-    local lobby = interface and interface:FindFirstChild("Lobby")
-    local styles = lobby and lobby:FindFirstChild("Styles")
-    local secret = styles and styles:FindFirstChild("SecretPity")
-    local bg = secret and secret:FindFirstChild("Background")
-    local body = bg and bg:FindFirstChild("Body")
-    local list = body and body:FindFirstChild("List")
-    return list and list:FindFirstChild(FIRST_PITY_ID)
+    local list = getFirstPityList()
+    local id = resolveFirstPityId()
+    return list and id and list:FindFirstChild(id)
 end
 local function selectFirstPity()
     pcall(function()
@@ -7146,7 +7337,7 @@ local function selectFirstPity()
         btn = findFirstPityButton()
     end
     if not btn or not btn:IsA("GuiButton") then
-        warn("[PITY FASE 1] Tombol Yogan3 tidak ditemukan di SecretPity")
+        warn("[PITY FASE 1] Tombol Pity untuk " .. FIRST_STYLE_NAME .. " belum ditemukan secara dinamis")
         return false
     end
     local ups = (debug and debug.getupvalues) or getupvalues
@@ -7171,7 +7362,7 @@ local function selectFirstPity()
                         else
                             for _ = 1, 25 do
                                 if preferredFirstPity() == true then
-                                    print("[PITY FASE 1] Yogan3 terkonfirmasi")
+                                    print("[PITY FASE 1] ID Pity " .. FIRST_STYLE_NAME .. " terkonfirmasi")
                                     return true
                                 end
                                 task.wait(0.2)
@@ -7195,18 +7386,18 @@ local function waitForFirstPity()
                 if selectedHere then
                     if os.clock() - lastRejoin > 14 then
                         lastRejoin = os.clock()
-                        print("[PITY FASE 1] Rejoin untuk menyimpan Yogan3; spin ditahan")
+                        print("[PITY FASE 1] Rejoin untuk menyimpan Pity " .. FIRST_STYLE_NAME .. "; spin ditahan")
                         local ok, err = pcall(function() TeleportService:Teleport(game.PlaceId, Player) end)
                         if not ok then warn("[PITY FASE 1] Rejoin gagal: " .. tostring(err)) end
                     end
                     task.wait(2)
                 else
                     clearFirstPityPending()
-                    print("[PITY FASE 1] Yogan3 tersimpan setelah rejoin; spin diizinkan")
+                    print("[PITY FASE 1] Pity " .. FIRST_STYLE_NAME .. " tersimpan setelah rejoin; spin diizinkan")
                     return true
                 end
             else
-                print("[PITY FASE 1] Yogan3 telah terpilih, spin diizinkan")
+                print("[PITY FASE 1] Pity " .. FIRST_STYLE_NAME .. " telah terpilih, spin diizinkan")
                 return true
             end
         elseif selected == false then
@@ -7214,21 +7405,23 @@ local function waitForFirstPity()
             if selectFirstPity() then
                 if saveFirstPityPending() then
                     selectedHere = true
-                    print("[PITY FASE 1] Yogan3 dipilih; wajib rejoin sebelum spin")
+                    print("[PITY FASE 1] Pity " .. FIRST_STYLE_NAME .. " dipilih; wajib rejoin sebelum spin")
                 else
                     warn("[PITY FASE 1] Gagal menyimpan penanda Pity; tahan spin")
                 end
             end
             task.wait(2)
         else
-            print("[PITY FASE 1] PreferredSecret belum siap; menunggu")
+            local id, reason = resolveFirstPityId()
+            print("[PITY FASE 1] Menunggu ID/PreferredSecret: "
+                .. tostring(id or reason or "data belum siap"))
             task.wait(2)
         end
     end
     return false
 end
 if not waitForFirstPity() then
-    warn("[PITY FASE 1] Yogan3 belum siap; AutoSpin tidak dimulai")
+    warn("[PITY FASE 1] ID Pity " .. FIRST_STYLE_NAME .. " belum siap; AutoSpin tidak dimulai")
     return
 end
 
@@ -7337,7 +7530,7 @@ local function doRollback()
         return
     end
 
-    print("[AutoSpin] Yogan tidak terdeteksi -> rollback")
+    print("[AutoSpin] " .. FIRST_STYLE_NAME .. " tidak terdeteksi -> rollback")
     mamoriBudget.markRollback()
 
     local ok = pcall(function()
@@ -7425,7 +7618,7 @@ task.spawn(function()
                 currentSlot = tonumber(__vlReadCell(TeamSel.CurrentStyleSlot))
             end)
             if currentSlot ~= expectedSlot then
-                mamoriWatch("Slot fase Yogan berubah/tidak terbaca: aktif="
+                mamoriWatch("Slot fase " .. FIRST_STYLE_NAME .. " berubah/tidak terbaca: aktif="
                     .. tostring(currentSlot) .. " lock=" .. tostring(expectedSlot)
                     .. "; spin DITAHAN agar tidak menimpa slot lain")
                 task.wait(0.5)
@@ -7433,9 +7626,9 @@ task.spawn(function()
             end
         end
         if stopFirstTargetIfNoSafeSlot() then break end
-        if mamoriBudget.capped() then
+        if firstLuckyCapReached() then
             print("[AutoSpin] BATAS " .. tostring(mamoriBudget.limit())
-                .. " Lucky Yogan tercapai -> rollback")
+                .. " Lucky " .. FIRST_STYLE_NAME .. " tercapai -> rollback")
             saveFlag()
             doRollback()
             running = false
@@ -7526,11 +7719,21 @@ task.spawn(function()
                 local okDef, def = pcall(function() return StyleMod:Get(id) end)
                 resultIsFirstTarget = okDef and def
                     and type(def.DisplayName) == "string"
-                    and def.DisplayName:match("^%s*(.-)%s*$"):lower() == "Yogan"
+                    and __vlIsFirst(def.DisplayName)
             end
             if resultIsFirstTarget then
-                stopSuccess()
-                break
+                -- Hasil remote bukan bukti kepemilikan; tunggu data inventory.
+                local confirmed = false
+                for _ = 1, 12 do
+                    if hasFirstTargetStyle() then confirmed = true; break end
+                    task.wait(0.15)
+                end
+                if confirmed then
+                    stopSuccess()
+                    break
+                end
+                mamoriWatch("Remote menyebut " .. TARGET
+                    .. " tetapi belum ada dalam inventory; tidak STOP palsu")
             end
 
             -- CEK INVENTORY SETELAH SPIN
@@ -7558,7 +7761,7 @@ task.spawn(function()
                     task.wait(0.2)
                 end
                 if mamoriLuckyPendingBefore then
-                    warn("[AutoSpin] Roll Lucky Yogan diterima tetapi saldo belum"
+                    warn("[AutoSpin] Roll Lucky " .. FIRST_STYLE_NAME .. " diterima tetapi saldo belum"
                         .. " turun; menunggu sinkronisasi, tidak spin lagi")
                     task.wait(0.5)
                     continue
@@ -7576,7 +7779,7 @@ task.spawn(function()
             end
             observeFirstTargetLucky(luckyAfter)
 
-            if luckyAfter <= 0 or mamoriBudget.capped() then
+            if luckyAfter <= 0 or firstLuckyCapReached() then
 
                 -- CEK SEBELUM ROLLBACK
                 if hasFirstTargetStyle() then
@@ -7584,10 +7787,10 @@ task.spawn(function()
                     break
                 end
 
-                print(mamoriBudget.capped()
+                print(firstLuckyCapReached()
                     and ("[AutoSpin] Batas " .. tostring(mamoriBudget.limit())
-                        .. " Lucky tercapai, memeriksa Yogan")
-                    or "[AutoSpin] Lucky habis, memeriksa Yogan")
+                        .. " Lucky tercapai, memeriksa " .. FIRST_STYLE_NAME)
+                    or "[AutoSpin] Lucky habis, memeriksa " .. FIRST_STYLE_NAME)
 
                 -- TUNGGU UPDATE DATA
                 task.wait(1)
@@ -7629,7 +7832,7 @@ do
     -- melalui LogService pada executor tertentu, fallback log tidak aktif.
     Log.MessageOut:Connect(function(message)
         if type(message) ~= "string" then return end
-        if message:find("[AutoSpin] Yogan SUDAH DIDAPATKAN", 1, true) then
+        if message:find("[AutoSpin] " .. FIRST_STYLE_NAME .. " SUDAH DIDAPATKAN", 1, true) then
             fallbackUsed = true
             return
         end
@@ -7637,7 +7840,7 @@ do
             hasRolledThisSession = true
             rollErrors = 0
         end
-        if message:find("[AutoSpin] Yogan tidak terdeteksi -> rollback", 1, true) then
+        if message:find("[AutoSpin] " .. FIRST_STYLE_NAME .. " tidak terdeteksi -> rollback", 1, true) then
             rollbackMentioned = true
             teleportCalled = true
             task.delay(12, function()
