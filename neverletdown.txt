@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.81-LUCKY-15-15: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.83-KISUKI-STYLE2-PEER: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -137,7 +137,7 @@ local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
     return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
 end
 
--- VERSION: v1.0.81-LUCKY-15-15 | satu style maksimal 30 Lucky; dua style maksimal 15 + 15 Lucky; label debug sinkron
+-- VERSION: v1.0.83-KISUKI-STYLE2-PEER | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Yogan + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -320,23 +320,23 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.81-LUCKY-15-15: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.83-KISUKI-STYLE2-PEER: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.81-LUCKY-15-15] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.83-KISUKI-STYLE2-PEER] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.81-LUCKY-15-15] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.83-KISUKI-STYLE2-PEER] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.81-LUCKY-15-15] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.83-KISUKI-STYLE2-PEER] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
 -- ADD-ON TARGET KEDUA v1.0.69: Yogan -> SANJU
 -- Perubahan v1.0.47:
 --  * IsLoaded di baris paling atas; RUN_KEY memakai JobId (tidak terkunci).
---  * Pemilihan slot: Common > aman > Kimiro (terakhir); Rintaro/Sanju dilindungi.
+--  * Pemilihan slot: Common > aman > fallback Kisuki (DisplayName) atau Style 2; target Style 1 dilindungi.
 --  * chooseSafeStyleSlot lebih tahan (SelectSlot tunggu 10 dtk, tidak stop
 --    hanya karena data belum sinkron).
 --  * Menu Styles dibuka sebelum mencari tombol Secret Pity Sanju.
@@ -402,17 +402,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.81-LUCKY-15-15: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.83-KISUKI-STYLE2-PEER: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.81-LUCKY-15-15] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.83-KISUKI-STYLE2-PEER] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.81-LUCKY-15-15: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.83-KISUKI-STYLE2-PEER: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -428,7 +428,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.81-LUCKY-15-15: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.83-KISUKI-STYLE2-PEER: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -1292,7 +1292,7 @@ do
                     kazana=true, hidari=true, yogan=true, feiko=true,
                     ibara=true, kumo=true, mikage=true, taichou=true,
                     hakka=true, akari=true, ronin=true, encho=true,
-                    rintaro=true, kimiro=true
+                    rintaro=true
                 }
                 local referenceStyles = {
                     Secret={"Kijo", "Timeskip Okazu", "Yogan", "Sanju", "Mamori", "Kisuki", "Kazana", "Hidari", "Yogan", "Feiko", "Ibara", "Kumo", "Mikage", "Taichou"},
@@ -1463,11 +1463,10 @@ do
                         or base:find("rintaro", 1, true) ~= nil
                 end
 
-                -- Urutan slot prioritas seperti fase pertama.
-                -- Common (1) > rarity string/angka aman (2-5) > Kimiro (6, terakhir).
+                -- Urutan prioritas fase kedua: Common > aman > Kisuki (DisplayName).
+                -- Style 1 dan Style 2 tetap dilindungi selama mencari Style 2.
                 local commonNames = {hinto=true, hakochi=true, sagumi=true,
                     tonkura=true, kishoti=true, yachikusai=true}
-                local exceptionNames = {kimiro=true}
                 local function initialSlotRank(id)
                     if type(id) ~= "string" or id == "" then
                         return nil, "slot belum siap"
@@ -1482,9 +1481,10 @@ do
                         or base:find("rintaro", 1, true) then
                         return nil, "target dilindungi"
                     end
-                    -- Dicek SEBELUM knownProtected (keduanya ada di sana).
-                    if exceptionNames[base] or exceptionNames[dn] then
-                        return 6, "fallback terakhir (Kimiro)"
+                    -- Kisuki dikenali dari DisplayName game, BUKAN ID internal.
+                    -- Dilakukan sebelum rarity Secret agar boleh menjadi fallback.
+                    if dn == "kisuki" then
+                        return 6, "fallback terakhir (DisplayName Kisuki)"
                     end
                     if commonNames[base] or commonNames[dn] then return 1, "Common" end
                     if knownProtected[base] or knownProtected[dn] then
@@ -2346,7 +2346,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[STYLE v1.0.81-LUCKY-15-15] Percobaan "
+                warn("[STYLE v1.0.83-KISUKI-STYLE2-PEER] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2358,14 +2358,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.81-LUCKY-15-15] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.83-KISUKI-STYLE2-PEER] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.81-LUCKY-15-15] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.83-KISUKI-STYLE2-PEER] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -6084,8 +6084,8 @@ if stage == "ROLL" then
 -- =====================================================================
 -- AUTO PILIH STYLE AMAN + REJOIN (TANPA PANEL DEBUG)
 -- Berdasarkan V4 yang telah diuji di Delta.
--- Prioritas: Common -> style aman -> Rintaro/Kimiro.
--- Mamori, Secret lainnya, Ultra, Evo tidak dipilih.
+-- Prioritas: Common -> aman -> fallback setara Kisuki / Style 2.
+-- Fallback aktif pada mode satu maupun dua style; rarity langka lain dilindungi.
 -- Jika seluruh slot terlindungi: berhenti dan kirim webhook.
 -- Jika slot berganti dan terverifikasi: rejoin place yang sama.
 -- Jika slot sesuai sejak awal: tidak rejoin.
@@ -6264,17 +6264,22 @@ do
             for r in pairs(conflicts) do mapping[r] = "CONFLICT" end
             return mapping, counts
         end
-        local exceptionStyles = {kimiro=true} -- IDs dari data pengguna / sementara
-
         local function classification(id, rarity, map, counts)
             local n = lower(id)
-            -- ID utama tidak pernah dipilih sebagai slot pengganti.
+            -- Target Style 1 selalu dilindungi, termasuk jika namanya Kisuki.
             if isTargetDisplay(id) then return "TERLINDUNGI", "target " .. FIRST_STYLE_NAME end
 
-            -- ID pengecualian hanya Kimiro (Kisuki sementara); Rintaro/Sanju dilindungi.
-            -- Pengecualian harus ditentukan sebelum rarity Secret dicek.
-            if exceptionStyles[n] then
-                return "PENGECUALIAN", "Kimiro hanya fallback terakhir"
+            -- Kisuki ditentukan dari DisplayName hasil Style:Get(id), bukan ID internal.
+            -- Kisuki dan target Style 2 SETARA sebagai fallback terakhir.
+            -- Berlaku di mode satu maupun dua style.
+            local def = getDef(id)
+            local display = def and type(def.DisplayName) == "string"
+                and __vlNormalizeStyleName(def.DisplayName) or ""
+            if display == "kisuki" then
+                return "PENGECUALIAN", "fallback Kisuki (DisplayName)"
+            end
+            if display ~= "" and __vlIsSecond(display) then
+                return "PENGECUALIAN", "fallback Style 2 " .. SECOND_STYLE_NAME .. " (DisplayName)"
             end
 
             -- Nama-nama Common bersumber dari daftar Common, bukan tebakan angka.
@@ -6477,20 +6482,36 @@ do
                 return false
             end
 
-            local commonTarget, normalTarget, exceptionTarget, activeEntry
+            local commonTarget, normalTarget, fallbackTarget, activeEntry
             for _, s in ipairs(all) do
                 if s.slot == active then activeEntry = s end
                 if s.cls == "COMMON" and (not commonTarget or s.slot == active) then
                     commonTarget = s
                 elseif s.cls == "AMAN" and (not normalTarget or s.slot == active) then
                     normalTarget = s
-                elseif s.cls == "PENGECUALIAN" and (not exceptionTarget or s.slot == active) then
-                    exceptionTarget = s
+                elseif s.cls == "PENGECUALIAN" and (not fallbackTarget or s.slot == active) then
+                    -- Kisuki dan Style 2: prioritas sama, slot aktif menang jika setara.
+                    fallbackTarget = s
                 end
             end
-            local target = commonTarget or normalTarget or exceptionTarget
+            local target = commonTarget or normalTarget or fallbackTarget
+            if target and target.cls == "PENGECUALIAN" then
+                -- Jangan timpa fallback langka ketika ada slot yang belum pasti.
+                for _, entry in ipairs(all) do
+                    if entry.cls == "TIDAK PASTI" then
+                        warn("[STYLE] Fallback Kisuki/Style 2 ditahan: slot "
+                            .. tostring(entry.slot) .. " belum dapat diklasifikasi")
+                        return false
+                    end
+                end
+                warn("[STYLE] FALLBACK SETARA: slot " .. tostring(target.slot)
+                    .. " berisi " .. tostring(target.id) .. " (" .. tostring(target.reason)
+                    .. "); dipilih mencari " .. FIRST_STYLE_NAME
+                    .. ". Jika ini Style 2, target tersebut mungkin perlu dicari ulang.")
+            end
             if not target then
-                -- v1.0.52: hanya final jika SEMUA slot pasti terlindungi.
+                -- Hanya STOP jika semua slot terlindungi; Kisuki dan Style 2
+                -- dihitung sebagai fallback, termasuk pada mode solo.
                 -- Data yang belum siap tidak boleh memicu webhook final.
                 local function protectedSnapshot()
                     local raw = getStyles()
