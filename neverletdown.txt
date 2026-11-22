@@ -27,7 +27,7 @@ local SECOND_STYLE_NAME = "Sanju" -- STYLE 2: target jika mode dua style aktif
 --         Jika saldo awal <30, jatah fase pertama dibagi sekitar separuh;
 --         fase kedua menggunakan sisa saldo dengan batas maksimal 15.
 -- false = satu style; MAKSIMAL 30 Lucky untuk Style 1, fase kedua tidak aktif.
-local SPIN_TWO_STYLES = false
+local SPIN_TWO_STYLES = true
 
 local MAX_LUCKY_TOTAL = 30
 local MAX_LUCKY_STYLE_1 = SPIN_TWO_STYLES and math.ceil(MAX_LUCKY_TOTAL / 2) or MAX_LUCKY_TOTAL
