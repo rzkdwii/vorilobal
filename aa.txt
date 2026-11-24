@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.85-ANY-TEAM: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.86-ANY-TEAM-BOOT-FIX: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -137,7 +137,7 @@ local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
     return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
 end
 
--- VERSION: v1.0.85-ANY-TEAM | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
+-- VERSION: v1.0.86-ANY-TEAM-BOOT-FIX | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
 -- Popup target hanya bergantung pada kepemilikan style.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 
@@ -316,16 +316,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.85-ANY-TEAM: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.86-ANY-TEAM-BOOT-FIX: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.85-ANY-TEAM] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.86-ANY-TEAM-BOOT-FIX] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.85-ANY-TEAM] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.86-ANY-TEAM-BOOT-FIX] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.85-ANY-TEAM] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.86-ANY-TEAM-BOOT-FIX] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -398,17 +398,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.85-ANY-TEAM: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.86-ANY-TEAM-BOOT-FIX: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.85-ANY-TEAM] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.86-ANY-TEAM-BOOT-FIX] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.85-ANY-TEAM: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.86-ANY-TEAM-BOOT-FIX: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -424,7 +424,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.85-ANY-TEAM: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.86-ANY-TEAM-BOOT-FIX: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -2122,7 +2122,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[STYLE v1.0.85-ANY-TEAM] Percobaan "
+                warn("[STYLE v1.0.86-ANY-TEAM-BOOT-FIX] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2134,14 +2134,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.85-ANY-TEAM] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.86-ANY-TEAM-BOOT-FIX] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.85-ANY-TEAM] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.86-ANY-TEAM-BOOT-FIX] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -3489,11 +3489,12 @@ local function runStartupDetection()
     if pingMs and pingMs > PING_LIMIT_MS then
         handleHighPing()
         return
+    end
 end
 local RequestJoin = nil
 local Serve = nil
 local function refreshGameRemotes()
-    if RequestJoin and RequestJoin.Parent then
+    if RequestJoin and RequestJoin.Parent and Serve and Serve.Parent then
         return true
     end
     local packages = RS:FindFirstChild("Packages")
@@ -4492,7 +4493,7 @@ for attempt = 1, 3 do
             pcall(function() writefile("xyn_compile_error.txt", tostring(compileErr)) end)
         end
         warn("[LEVEL BOOT] " .. lastBootError)
-        bootReport("COMPILE ERROR - cek debug " .. FIRST_STYLE_NAME)
+        bootReport("COMPILE ERROR - cek debug LEVEL BOOT")
     else
         local ok, runErr = pcall(fn)
         if ok then
