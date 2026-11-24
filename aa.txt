@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.84-KISUKI-STYLE2-PEER: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.85-ANY-TEAM: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -137,7 +137,7 @@ local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
     return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
 end
 
--- VERSION: v1.0.84-KISUKI-STYLE2-PEER | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
+-- VERSION: v1.0.85-ANY-TEAM | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
 -- Popup target hanya bergantung pada kepemilikan style.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
 
@@ -316,16 +316,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.84-KISUKI-STYLE2-PEER: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.85-ANY-TEAM: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.84-KISUKI-STYLE2-PEER] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.85-ANY-TEAM] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.84-KISUKI-STYLE2-PEER] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.85-ANY-TEAM] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.84-KISUKI-STYLE2-PEER] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.85-ANY-TEAM] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -398,17 +398,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.84-KISUKI-STYLE2-PEER: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.85-ANY-TEAM: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.84-KISUKI-STYLE2-PEER] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.85-ANY-TEAM] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.84-KISUKI-STYLE2-PEER: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.85-ANY-TEAM: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -424,7 +424,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.84-KISUKI-STYLE2-PEER: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.85-ANY-TEAM: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -2122,7 +2122,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[STYLE v1.0.84-KISUKI-STYLE2-PEER] Percobaan "
+                warn("[STYLE v1.0.85-ANY-TEAM] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2134,14 +2134,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.84-KISUKI-STYLE2-PEER] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.85-ANY-TEAM] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.84-KISUKI-STYLE2-PEER] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.85-ANY-TEAM] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
@@ -3493,7 +3493,7 @@ end
 local RequestJoin = nil
 local Serve = nil
 local function refreshGameRemotes()
-    if RequestJoin and RequestJoin.Parent and Serve and Serve.Parent then
+    if RequestJoin and RequestJoin.Parent then
         return true
     end
     local packages = RS:FindFirstChild("Packages")
@@ -3516,7 +3516,7 @@ local function refreshGameRemotes()
     local remote = gameService and gameService:FindFirstChild("RF")
     RequestJoin = remote and remote:FindFirstChild("RequestJoin") or nil
     Serve = remote and remote:FindFirstChild("Serve") or nil
-    return RequestJoin ~= nil and Serve ~= nil
+    return RequestJoin ~= nil
 end
 refreshGameRemotes()
 task.wait(0.1)
@@ -3654,27 +3654,23 @@ local function extractTeamIdFromRemoteResult(result)
     end
     return nil
 end
+-- Join and Serve are independent: a stalled Serve must not block team entry.
 local function joinTeam(teamId)
-    if not refreshGameRemotes() then
-        return false, nil
-    end
+    if not refreshGameRemotes() then return false, "RequestJoin belum tersedia" end
     lastRequestedTeamId = teamId
     lastRequestAt = os.clock()
     local beforeTeam = player.Team
-    local requestResult = nil
-    local ok = pcall(function()
-        requestResult = RequestJoin:InvokeServer(teamId, 5)
-        Serve:InvokeServer(Vector3.zero, 0)
+    local ok, result = pcall(function()
+        return RequestJoin:InvokeServer(teamId, 5)
     end)
     local afterTeam = player.Team
     if ok and afterTeam and afterTeam ~= beforeTeam then
         rememberTeamObject(teamId, afterTeam)
     end
-    local resultTeamId = extractTeamIdFromRemoteResult(requestResult)
-    if ok and resultTeamId == teamId and afterTeam then
+    if ok and extractTeamIdFromRemoteResult(result) == teamId and afterTeam then
         rememberTeamObject(teamId, afterTeam)
     end
-    return ok, requestResult
+    return ok, result
 end
 local function normalizeTeamValue(value)
     if value == nil then return nil end
@@ -3770,357 +3766,101 @@ end
 local function teamLooksConfirmed(teamId)
     return teamLooksConfirmedFor(player, teamId)
 end
-local function getPresentPlayerObjects()
-    local present = Players:GetPlayers()
-    table.sort(present, function(a, b) return a.UserId < b.UserId end)
-    return present
-end
-end
-local function getPresentSignatureFrom(snapshot)
-    local ids = {}
-    for _, p in ipairs(snapshot) do
-        table.insert(ids, tostring(p.UserId))
-    end
-    return table.concat(ids, "|")
-end
-local function getPresentSignature()
-    return getPresentSignatureFrom(getPresentPlayerObjects())
-end
-local function getTargetTeamFromSnapshot(targetPlayer, snapshot)
-    if not targetPlayer then
-        return nil, nil
-    end
-    for index, p in ipairs(snapshot) do
-        if p == targetPlayer or p.UserId == targetPlayer.UserId then
-            return (index % 2 == 1) and 1 or 2, index
-        end
-    end
-    return nil, nil
-end
-local TEAM_ROSTER_STABLE_TIME = 1.50
-local TEAM_CONFIRM_STABLE_TIME = 0.80
-local TEAM_RETRY_DELAY = 0.85
-local TEAM_SANITY_INTERVAL = 2.00
-local teamGeneration = 0
-local teamCycleRunningGeneration = nil
-local correctionRunningGeneration = nil
-local teamJoinFinished = false
-local lockedTeamId = nil
-local lockedRosterSignature = nil
+-- ANY TEAM: no roster sorting, team locks or partner separation.
 local roundResetActive = false
-local function generationIsCurrent(generation)
-    return getgenv().main
-        and detectorIsCurrent()
-        and generation == teamGeneration
+local teamGeneration = 0
+local teamJoinFinished = false
+local teamWorkerRunning = false
+local nextTeamId = 1
+local function anyTeamConfirmed()
+    return teamLooksConfirmed(1) or teamLooksConfirmed(2)
+        or (player.Team ~= nil and player.Neutral == false)
 end
-local function waitForStableRoster(generation)
-    local lastSignature = nil
-    local stableSince = 0
-    while generationIsCurrent(generation) do
-        local snapshot = getPresentPlayerObjects()
-        local signature = getPresentSignatureFrom(snapshot)
-        if signature ~= lastSignature then
-            lastSignature = signature
-            stableSince = os.clock()
-        elseif os.clock() - stableSince >= TEAM_ROSTER_STABLE_TIME then
-            return snapshot, signature
-        end
-        task.wait(0.15)
-    end
-    return nil, nil
-end
-local function waitForStableLocalConfirmation(generation, targetTeamId)
-    local stableSince = nil
-    while generationIsCurrent(generation) do
-        if teamLooksConfirmed(targetTeamId) then
-            stableSince = stableSince or os.clock()
-            if os.clock() - stableSince >= TEAM_CONFIRM_STABLE_TIME then
-                return true
-            end
-        else
-            stableSince = nil
-            return false
-        end
-        task.wait(0.10)
-    end
-    return false
-end
-local function findSameTeamPartner()
-    local myTeam = player.Team
-    for _, partner in ipairs(getPresentPlayerObjects()) do
-        if partner ~= player then
-            local partnerTeam = partner.Team
-            if myTeam and partnerTeam and myTeam == partnerTeam then
-                return partner
-            end
-            for teamId = 1, 2 do
-                if teamLooksConfirmedFor(player, teamId)
-                    and teamLooksConfirmedFor(partner, teamId)
-                then
-                    return partner
-                end
-            end
-        end
-    end
-    return nil
-end
-local function getKnownTeamIdFor(targetPlayer)
-    for teamId = 1, 2 do
-        if teamLooksConfirmedFor(targetPlayer, teamId) then
-            return teamId
-        end
-    end
-    return nil
-end
-local function pairSeparatedState(snapshot)
-    if #snapshot ~= 2 then
-        return true
-    end
-    local partner = snapshot[1] == player and snapshot[2] or snapshot[1]
-    if not partner or partner == player then
-        return true
-    end
-    if player.Team and partner.Team then
-        return player.Team ~= partner.Team
-    end
-    local myTeamId = getKnownTeamIdFor(player)
-    local partnerTeamId = getKnownTeamIdFor(partner)
-    if myTeamId and partnerTeamId then
-        return myTeamId ~= partnerTeamId
-    end
-    return nil
-end
-local function waitForPairSeparation(generation, snapshot, targetTeamId)
-    if #snapshot ~= 2 then
-        return true
-    end
-    local separatedSince = nil
-    while generationIsCurrent(generation) do
-        if not teamLooksConfirmed(targetTeamId) then
-            return false
-        end
-        local state = pairSeparatedState(snapshot)
-        if state == true then
-            separatedSince = separatedSince or os.clock()
-            if os.clock() - separatedSince >= 0.60 then
-                return true
-            end
-        else
-            separatedSince = nil
-        end
-        task.wait(0.10)
-    end
-    return false
-end
-local function runTeamCycle(generation)
-    local snapshot, signature = waitForStableRoster(generation)
-    if not snapshot or not generationIsCurrent(generation) then
-        return false
-    end
-    local targetTeamId, position = getTargetTeamFromSnapshot(player, snapshot)
-    if not targetTeamId then
-        return false
-    end
-    lockedTeamId = targetTeamId
-    lockedRosterSignature = signature
-    teamJoinFinished = false
-    if position then
-        task.wait(0.12 + ((position - 1) * 0.18))
-    end
-    local lastTeamLog = -100
-    while generationIsCurrent(generation) do
-        if teamLooksConfirmed(targetTeamId) then
-            if waitForStableLocalConfirmation(generation, targetTeamId) then
-                if waitForPairSeparation(generation, snapshot, targetTeamId) then
-                    teamJoinFinished = true
-                    warn('[LEVEL TEAM] Bergabung dan terkonfirmasi: Team ' .. tostring(targetTeamId))
-                    return true
-                end
-            end
-        end
-        local sent = joinTeam(targetTeamId)
-        if os.clock() - lastTeamLog >= 12 then
-            lastTeamLog = os.clock()
-            warn('[LEVEL TEAM] Request Team ' .. tostring(targetTeamId)
-                .. ' | remote=' .. tostring(sent)
-                .. ' | confirmed=' .. tostring(teamLooksConfirmed(targetTeamId)))
-        end
-        task.wait(TEAM_RETRY_DELAY)
-    end
-    return false
+local function teamWorkerAllowed()
+    return detectorIsCurrent() and getgenv().main and not roundResetActive
+        and tutorialGateCleared and not tutorialStillActive()
 end
 local function launchTeamCycle()
-    if roundResetActive or not getgenv().main then
-        return
-    end
-    local generation = teamGeneration
-    if teamCycleRunningGeneration == generation then
-        return
-    end
-    teamCycleRunningGeneration = generation
+    if teamWorkerRunning or not teamWorkerAllowed() then return end
+    teamWorkerRunning = true
     task.spawn(function()
-        runTeamCycle(generation)
-        if teamCycleRunningGeneration == generation then
-            teamCycleRunningGeneration = nil
-        end
+        local ok, err = pcall(function()
+            while teamWorkerAllowed() do
+                if anyTeamConfirmed() then
+                    if not teamJoinFinished then
+                        teamJoinFinished = true
+                        warn('[LEVEL TEAM] Masuk tim berhasil | Team=' .. tostring(player.Team))
+                        -- Preserve existing Serve action without blocking join confirmation.
+                        task.spawn(function()
+                            refreshGameRemotes()
+                            if Serve and Serve.Parent and teamWorkerAllowed() then
+                                pcall(function() Serve:InvokeServer(Vector3.zero, 0) end)
+                            end
+                        end)
+                    end
+                    break
+                end
+                teamJoinFinished = false
+                local generation = teamGeneration
+                local target = nextTeamId
+                nextTeamId = target == 1 and 2 or 1
+                warn('[LEVEL TEAM] Request Team ' .. tostring(target) .. ' | mulai')
+                local done, sent, result = false, false, nil
+                local request = task.spawn(function()
+                    sent, result = joinTeam(target)
+                    done = true
+                end)
+                local deadline = os.clock() + 5
+                while not done and not anyTeamConfirmed() and teamWorkerAllowed()
+                    and generation == teamGeneration and os.clock() < deadline do
+                    task.wait(0.15)
+                end
+                if not done then
+                    pcall(task.cancel, request)
+                    warn('[LEVEL TEAM] Request belum selesai | Team=' .. tostring(target))
+                else
+                    warn('[LEVEL TEAM] Request selesai | Team=' .. tostring(target)
+                        .. ' | ok=' .. tostring(sent) .. ' | result=' .. tostring(result))
+                end
+                if generation == teamGeneration and teamWorkerAllowed() then
+                    local confirmDeadline = os.clock() + 2
+                    while not anyTeamConfirmed() and teamWorkerAllowed()
+                        and generation == teamGeneration and os.clock() < confirmDeadline do
+                        task.wait(0.15)
+                    end
+                end
+            end
+        end)
+        teamWorkerRunning = false
+        if not ok then warn('[LEVEL TEAM] Worker error: ' .. tostring(err)) end
     end)
 end
-local function invalidateTeamAssignment(startImmediately)
-    teamGeneration = teamGeneration + 1
-    teamJoinFinished = false
-    lockedTeamId = nil
-    lockedRosterSignature = nil
-    correctionRunningGeneration = nil
-    if startImmediately and not roundResetActive then
-        launchTeamCycle()
-    end
-end
 local function initializeJoins()
-    if teamGeneration == 0 then
-        invalidateTeamAssignment(true)
-    else
+    while detectorIsCurrent() and getgenv().main do
         launchTeamCycle()
-    end
-    while getgenv().main and detectorIsCurrent() do
-        if teamJoinFinished and lockedTeamId then
-            return true
-        end
-        if not roundResetActive and teamCycleRunningGeneration == nil then
-            launchTeamCycle()
-        end
-        task.wait(0.15)
+        if teamJoinFinished and anyTeamConfirmed() and not roundResetActive then return true end
+        task.wait(0.25)
     end
     return false
 end
-local function correctLockedTeam()
-    if roundResetActive then
-        return
-    end
-    if not lockedTeamId then
-        launchTeamCycle()
-        return
-    end
-    local generation = teamGeneration
-    if correctionRunningGeneration == generation then
-        return
-    end
-    correctionRunningGeneration = generation
-    teamJoinFinished = false
-    local targetTeamId = lockedTeamId
-    task.spawn(function()
-        while generationIsCurrent(generation)
-            and not roundResetActive
-            and lockedTeamId == targetTeamId
-        do
-            if teamLooksConfirmed(targetTeamId) then
-                if waitForStableLocalConfirmation(generation, targetTeamId) then
-                    teamJoinFinished = true
-                    break
-                end
-            end
-            joinTeam(targetTeamId)
-            task.wait(TEAM_RETRY_DELAY)
-        end
-        if correctionRunningGeneration == generation then
-            correctionRunningGeneration = nil
-        end
-    end)
-end
-local function sanityCheckTeam()
-    if roundResetActive or not getgenv().main then
-        return
-    end
-    -- Team retries must not interrupt Coach/tutorial. Action workers do not wait on this confirmation.
-    if not tutorialGateCleared or tutorialStillActive() then
-        return
-    end
-    -- The primary team-cycle already owns retries; avoid a second concurrent RequestJoin worker.
-    if teamCycleRunningGeneration == teamGeneration then
-        return
-    end
-    local currentSignature = getPresentSignature()
-    if lockedRosterSignature and currentSignature ~= lockedRosterSignature then
-        invalidateTeamAssignment(true)
-        return
-    end
-    if not lockedTeamId then
-        launchTeamCycle()
-        return
-    end
-    if not teamLooksConfirmed(lockedTeamId) then
-        correctLockedTeam()
-        return
-    end
-    local sameTeamPartner = findSameTeamPartner()
-    if sameTeamPartner then
-        local snapshot = getPresentPlayerObjects()
-        local myTarget = getTargetTeamFromSnapshot(player, snapshot)
-        if myTarget and myTarget ~= lockedTeamId then
-            invalidateTeamAssignment(true)
-            return
-        end
-    end
-end
 local function beginRoundTeamReset()
-    if roundResetActive then return end
     roundResetActive = true
-    teamGeneration = teamGeneration + 1
+    teamGeneration += 1
     teamJoinFinished = false
-    lockedTeamId = nil
-    lockedRosterSignature = nil
-    correctionRunningGeneration = nil
 end
 local function finishRoundTeamReset()
     roundResetActive = false
-    invalidateTeamAssignment(true)
+    teamGeneration += 1
+    teamJoinFinished = false
+    launchTeamCycle()
 end
-local watchedTeamPlayers = {}
-local function watchTeamPlayer(p)
-    if watchedTeamPlayers[p] then
-        return
-    end
-    watchedTeamPlayers[p] = true
-    p:GetPropertyChangedSignal("Team"):Connect(function()
-        if not detectorIsCurrent() or not getgenv().main then return end
-        if p == player
-            and lastRequestedTeamId
-            and os.clock() - lastRequestAt <= 3
-            and p.Team
-        then
-            rememberTeamObject(lastRequestedTeamId, p.Team)
-        end
-        task.defer(sanityCheckTeam)
-    end)
-end
-for _, p in ipairs(Players:GetPlayers()) do
-    watchTeamPlayer(p)
-end
-Players.PlayerAdded:Connect(function(p)
-    if not detectorIsCurrent() then return end
-    watchTeamPlayer(p)
-    do
-        task.defer(function()
-            if not roundResetActive and tutorialGateCleared and not tutorialStillActive() then
-                invalidateTeamAssignment(true)
-            end
-        end)
-    end
-end)
-Players.PlayerRemoving:Connect(function(p)
-    if not detectorIsCurrent() then return end
-    watchedTeamPlayers[p] = nil
-    do
-        task.defer(function()
-            if not roundResetActive and tutorialGateCleared and not tutorialStillActive() then
-                invalidateTeamAssignment(true)
-            end
-        end)
-    end
-end)
 task.spawn(function()
     while getgenv().main and detectorIsCurrent() do
-        task.wait(TEAM_SANITY_INTERVAL)
-        sanityCheckTeam()
+        if teamWorkerAllowed() then
+            if not anyTeamConfirmed() then teamJoinFinished = false end
+            if not teamJoinFinished then launchTeamCycle() end
+        end
+        task.wait(2)
     end
 end)
 local function ClickAtPosition(x, y)
@@ -4143,12 +3883,12 @@ end
 local function GetMousePosition()
     return UIS:GetMouseLocation()
 end
-local function isInTeam1()
-    return teamJoinFinished and lockedTeamId == 1
+local function isInAnyTeam()
+    return not roundResetActive and teamJoinFinished and anyTeamConfirmed()
 end
 local function startAutoClickLoop()
     task.spawn(function()
-        while autoClick and isInTeam1() do
+        while autoClick and isInAnyTeam() do
             local pos = GetMousePosition()
             pcall(ClickAtPosition, pos.X, pos.Y)
             task.wait(clickCD)
@@ -4269,7 +4009,7 @@ end
 RunService.Heartbeat:Connect(function()
     if not detectorIsCurrent() then return end
     handleShiftLock()
-    if isInTeam1() and autoClick and (os.clock() - lastClick >= clickDelay) then
+    if isInAnyTeam() and autoClick and (os.clock() - lastClick >= clickDelay) then
         local pos = GetMousePosition()
         pcall(ClickAtPosition, pos.X, pos.Y)
         lastClick = os.clock()
@@ -4310,7 +4050,7 @@ task.spawn(function()
     -- Team work runs independently. initializeJoins may take a long time to confirm,
     -- but it must never hold the ball-action worker or level progress panel hostage.
     task.spawn(function()
-        warn('[LEVEL TEAM] Mulai meminta tim (terpisah dari leveling; tetap retry hingga masuk)')
+        warn('[LEVEL TEAM] Mulai Auto Join ANY TEAM; tanpa pembagian pemain')
         local ok, result = pcall(initializeJoins)
         if not ok then
             warn('[LEVEL TEAM] Worker error: ' .. tostring(result))
