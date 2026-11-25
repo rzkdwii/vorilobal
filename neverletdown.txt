@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.85-ABILITY-TOGGLE: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.87-ABILITY-MIN3-WEBHOOK: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -31,9 +31,12 @@ local SPIN_TWO_STYLES = true
 
 -- true  = Cari minimal 1 Ability Secret setelah fase Style selesai/STOP.
 --         Jika sudah memiliki Secret, langsung popup tanpa spin Ability.
+--         Lucky Ability AWAL <=2: STOP total, tanpa spin atau rollback.
+--         Lucky AWAL >=3: spin normal lalu Lucky hingga Secret atau rollback jika habis.
 -- false = Lewati seluruh pencarian/pemeriksaan/popup Ability Secret.
 --         Popup hasil Style tetap berjalan normal.
 local SPIN_SECRET_ABILITY = true
+local MIN_LUCKY_ABILITY_START = 3 -- 0/1/2: STOP; >=3: boleh mulai
 
 local MAX_LUCKY_TOTAL = 30
 local MAX_LUCKY_STYLE_1 = SPIN_TWO_STYLES and math.ceil(MAX_LUCKY_TOTAL / 2) or MAX_LUCKY_TOTAL
@@ -147,7 +150,7 @@ local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
     return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
 end
 
--- VERSION: v1.0.85-ABILITY-TOGGLE | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
+-- VERSION: v1.0.87-ABILITY-MIN3-WEBHOOK | Lucky Ability awal <=2 STOP; webhook tunggu hasil final; Style tetap 30 Lucky / 15+15
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Yogan + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -330,16 +333,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.85-ABILITY-TOGGLE: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.87-ABILITY-MIN3-WEBHOOK: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.85-ABILITY-TOGGLE] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.87-ABILITY-MIN3-WEBHOOK] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.85-ABILITY-TOGGLE] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.87-ABILITY-MIN3-WEBHOOK] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.85-ABILITY-TOGGLE] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.87-ABILITY-MIN3-WEBHOOK] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -412,17 +415,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.85-ABILITY-TOGGLE: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.87-ABILITY-MIN3-WEBHOOK: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.85-ABILITY-TOGGLE] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.87-ABILITY-MIN3-WEBHOOK] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.85-ABILITY-TOGGLE: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.87-ABILITY-MIN3-WEBHOOK: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -438,7 +441,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.85-ABILITY-TOGGLE: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.87-ABILITY-MIN3-WEBHOOK: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -784,32 +787,51 @@ do
                     return nil
                 end
                 local inventoryRareStyleSummary
-                local showPopup
-                -- v1.0.66: webhook akhir untuk Yogan (fase 1) dan Sanju (fase 2).
+                local showPopup, hasSanju
+                -- v1.0.87: satu laporan akhir, setelah kedua alur terminal.
+                -- Panggilan lama hanya mencatat hasil Style; tidak mengirim dini.
+                local finalReport = {lastAttempt = -100, sent = false}
                 local function notifyFinal(hasTwins, reason)
-                    reason = reason or "FINAL"
-                    if webhookBusy then return end
+                    if type(hasTwins) == "boolean" then
+                        finalReport.hasTwins = hasTwins
+                        finalReport.styleReason = reason or "FINAL"
+                    end
+                    if not finalReport.styleReason then return end
+                    if SPIN_SECRET_ABILITY and not finalReport.ability then return end
+                    if finalReport.sent or webhookBusy then return end
+                    if os.clock() - finalReport.lastAttempt < 5 then return end
+                    finalReport.lastAttempt = os.clock()
+                    hasTwins = finalReport.hasTwins
+                    reason = finalReport.styleReason
                     if reason ~= "NO_SLOT_FIRST_THE_TWINS" and hasFirstTarget() ~= true then return end
                     if type(WEBHOOK_URL) ~= "string" or WEBHOOK_URL == "" then return end
                     if not WEBHOOK_URL:match("^https://") then return end
                     if typeof(isfile) ~= "function" or typeof(writefile) ~= "function"
                         or typeof(readfile) ~= "function" then return end
                     if type(inventoryRareStyleSummary) ~= "function" then return end
+                    -- Ambil nama Secret aktual setelah inventori Ability terkonfirmasi.
+                    local secret = SPIN_SECRET_ABILITY and knownSecretName() or nil
+                    if SPIN_SECRET_ABILITY and (finalReport.ability == "ABILITY_ALREADY"
+                        or finalReport.ability == "ABILITY_FOUND") and not secret then
+                        twinsStatus("Webhook menunggu nama Ability Secret terkonfirmasi")
+                        return
+                    end
                     local rareText = inventoryRareStyleSummary()
                     if not rareText then
                         twinsStatus("Webhook menunggu data inventori Style siap")
                         return
                     end
                     -- Versi baru: notifikasi lengkap tidak tertahan flag versi lama.
-                    local file = "VL_TheTwins_Sanju_Final_Once_v166_"
-                        .. tostring(playerA.UserId) .. __vlConfigSuffix() .. ".flag"
+                    local file = "VL_Style_Ability_Final_Once_v187_"
+                        .. tostring(playerA.UserId) .. __vlConfigSuffix()
+                        .. (SPIN_SECRET_ABILITY and "_ABILITY_ON" or "_ABILITY_OFF") .. ".flag"
                     local okRead, existing = pcall(function()
                         if isfile(file) then return readfile(file) end
                         return nil
                     end)
                     if not okRead then return end
                     if type(existing) == "string" then
-                        if existing:match("^sent|") then return end
+                        if existing:match("^sent|") then finalReport.sent = true; return end
                         local pendingTime = tonumber(existing:match("^pending|(%d+)"))
                         if pendingTime and os.time() - pendingTime < 35 then return end
                     end
@@ -834,13 +856,24 @@ do
                             and hasFirstTarget() == true
                         local styleResult = hasTwins and FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME
                             or (owned and FIRST_STYLE_NAME or FIRST_STYLE_NAME .. " belum didapat")
-                        local secret = knownSecretName()
+                        local abilityResult = "Pencarian dinonaktifkan"
+                        if SPIN_SECRET_ABILITY then
+                            if finalReport.ability == "ABILITY_LOW_LUCKY" then
+                                abilityResult = "STOP TOTAL: Lucky Ability awal "
+                                    .. tostring(finalReport.lucky) .. " (<=2); tanpa spin"
+                            elseif finalReport.ability == "ABILITY_FOUND" then
+                                abilityResult = "SELESAI: Secret didapat melalui spin"
+                            else
+                                abilityResult = "SELESAI: Secret sudah dimiliki"
+                            end
+                        end
                         local content = "@everyone\n✅ Hasil akhir pencarian Style!\n"
                             .. "Akun: " .. tostring(playerA.Name)
                             .. " (UserId: " .. tostring(playerA.UserId) .. ")\n"
                             .. "Status: " .. statusLabel .. "\n"
                             .. "Style: " .. styleResult .. "\n"
                             .. rareText .. "\n"
+                            .. "Status Ability: " .. abilityResult .. "\n"
                             .. "Ability Secret: " .. tostring(secret or "Belum terdeteksi")
                         local delivered = false
                         for attempt = 1, 3 do
@@ -856,6 +889,7 @@ do
                                 and tonumber(res.StatusCode or res.Status) or nil
                             if status and status >= 200 and status < 300 then
                                 pcall(writefile, file, "sent|" .. tostring(os.time()))
+                                finalReport.sent = true
                                 twinsStatus("Webhook final terkirim: " .. statusLabel)
                                 delivered = true
                                 break
@@ -994,12 +1028,12 @@ do
                         title, body = "Ability Secret didapat!",
                             "Target minimal 1 Ability Secret terpenuhi: "
                             .. tostring(knownSecretName() or "Secret") .. ". Spin Ability dihentikan."
+                    elseif kind == "ABILITY_LOW_LUCKY" then
+                        title, body, warning = "STOP TOTAL - Lucky Ability <=2",
+                            "Lucky Ability awal terlalu sedikit dan belum ada Secret. Tidak spin atau rollback.", true
                     elseif kind == "ABILITY_NO_SLOT" then
-                        title, body, warning = "STOP - Slot Ability penuh",
-                            "Tidak ada slot Ability yang aman untuk spin. Ability langka tetap dilindungi.", true
-                    elseif kind == "ABILITY_NO_SPINS" then
-                        title, body, warning = "STOP - Spin Ability habis",
-                            "Belum mendapatkan Ability Secret dan saldo Spin Ability sudah habis.", true
+                        title, body, warning = "TUNGGU - Slot Ability penuh",
+                            "Tidak ada slot Ability yang aman untuk spin. Ability langka tetap dilindungi; pencarian ditahan.", true
                     else
                         title, body = "Sudah Mendapatkan Target",
                             SPIN_TWO_STYLES and (FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME)
@@ -1014,7 +1048,8 @@ do
                     pumpPopup()
                 end
 
-                -- v1.0.85: Ability hanya berjalan jika SPIN_SECRET_ABILITY=true setelah Style berakhir (sukses / NO SLOT).
+                -- v1.0.86: Ability hanya berjalan jika SPIN_SECRET_ABILITY=true setelah Style berakhir (sukses / NO SLOT).
+                -- Saldo habis tanpa Secret => rollback; bukan STOP final.
                 -- Cek Secret lebih dahulu. Jangan spin ulang bila sudah punya 1.
                 local abilityWorkerStarted = false
                 local abilityWorkerFinished = false
@@ -1156,6 +1191,214 @@ do
                     local lucky = abilityA and abilityA.LuckySpins and readSignal(abilityA.LuckySpins)
                     return normal, lucky
                 end
+                -- Checkpoint Style sebelum spin Ability. Rejoin normal sekali untuk
+                -- menyimpan hasil Style, lalu cocokkan inventori setelah masuk kembali.
+                local abilitySave = {
+                    key = "VL_Ability_Checkpoint_v186_" .. tostring(playerA.UserId) .. __vlConfigSuffix(),
+                    session = game:GetService("HttpService"):GenerateGUID(false),
+                    inFlight = false, lastAttempt = -100, lastNotice = -100,
+                }
+                function abilitySave.notice(message)
+                    if os.clock() - abilitySave.lastNotice >= 8 then
+                        abilitySave.lastNotice = os.clock()
+                        abilityStatus(message)
+                    end
+                end
+                function abilitySave.signature()
+                    if not teamA then
+                        local knit = getKnit()
+                        if knit then pcall(function() teamA = knit.GetController("TeamSelectionController") end) end
+                    end
+                    local slots = readSignal(teamA and teamA.Styles)
+                    if type(slots) ~= "table" then return nil end
+                    local parts = {}
+                    for key, id in pairs(slots) do
+                        local idx = tonumber(key)
+                        if idx and idx >= 1 and idx % 1 == 0 then
+                            if type(id) ~= "string" or id == "" then return nil end
+                            parts[#parts + 1] = tostring(idx) .. "=" .. id
+                        end
+                    end
+                    if #parts == 0 then return nil end
+                    table.sort(parts)
+                    return table.concat(parts, "|")
+                end
+                function abilitySave.read()
+                    local raw
+                    if typeof(readfile) == "function" then
+                        pcall(function() raw = readfile(abilitySave.key .. ".txt") end)
+                    end
+                    if type(raw) ~= "string" or raw == "" then
+                        pcall(function() raw = TPA:GetTeleportSetting(abilitySave.key) end)
+                    end
+                    if type(raw) ~= "string" or raw == "" then return nil end
+                    local ok, data = pcall(function() return game:GetService("HttpService"):JSONDecode(raw) end)
+                    if ok and type(data) == "table" and type(data.style) == "string"
+                        and type(data.origin) == "string" and type(data.normal) == "number"
+                        and type(data.lucky) == "number" then return data end
+                    return nil
+                end
+                function abilitySave.write(data)
+                    local raw = game:GetService("HttpService"):JSONEncode(data)
+                    local fileOK = false
+                    if typeof(writefile) == "function" then
+                        fileOK = pcall(writefile, abilitySave.key .. ".txt", raw)
+                    end
+                    local teleportOK = pcall(function() TPA:SetTeleportSetting(abilitySave.key, raw) end)
+                    return fileOK or teleportOK
+                end
+                function abilitySave.clear()
+                    if typeof(delfile) == "function" then pcall(delfile, abilitySave.key .. ".txt") end
+                    pcall(function() TPA:SetTeleportSetting(abilitySave.key, "") end)
+                end
+                pcall(function()
+                    TPA.TeleportInitFailed:Connect(function(p, result, message)
+                        if p == playerA and abilitySave.inFlight then
+                            abilitySave.inFlight = false
+                            abilityStatus("Teleport Ability gagal: " .. tostring(result) .. " / " .. tostring(message))
+                        end
+                    end)
+                end)
+                -- Cek hanya sebelum memulai siklus. Checkpoint yang sah membawa
+                -- izin >=3 lintas rejoin, sehingga 2/1/0 karena spin bukan STOP.
+                function abilitySave.initialGate()
+                    if abilitySave.allowed then return true end
+                    local _, lucky = abilityBalances()
+                    if type(lucky) ~= "number" or lucky < 0 then return false end
+                    local data = abilitySave.read()
+                    if data and data.style == abilitySave.signature()
+                        and data.lucky >= MIN_LUCKY_ABILITY_START then
+                        abilitySave.allowed = true
+                        return true
+                    end
+                    if lucky < MIN_LUCKY_ABILITY_START then
+                        -- Hindari STOP karena data sementara 0 saat baru join.
+                        for _ = 1, 3 do
+                            task.wait(0.4)
+                            if hasSecretAbility() ~= false then return false end
+                            local _, checkLucky = abilityBalances()
+                            if type(checkLucky) ~= "number" or checkLucky ~= lucky then return false end
+                        end
+                        abilityWorkerFinished = true
+                        finalReport.ability = "ABILITY_LOW_LUCKY"
+                        finalReport.lucky = lucky
+                        abilitySave.clear()
+                        abilityStatus("STOP TOTAL: Lucky Ability awal " .. tostring(lucky)
+                            .. " (<=2); tanpa spin/rollback")
+                        pcall(showPopup, "Saldo Lucky Ability: " .. tostring(lucky), "ABILITY_LOW_LUCKY")
+                        return false
+                    end
+                    abilitySave.allowed = true
+                    abilityStatus("Lucky Ability awal " .. tostring(lucky)
+                        .. " (>=3); pencarian diizinkan hingga Secret atau rollback")
+                    return true
+                end
+                function abilitySave.ready()
+                    -- Teleport tanpa callback sukses/gagal tidak boleh mengunci worker selamanya.
+                    if abilitySave.inFlight and os.clock() - abilitySave.lastAttempt > 35 then
+                        abilitySave.inFlight = false
+                        abilityStatus("Teleport Ability belum terkonfirmasi; cek ulang sebelum mencoba lagi")
+                    end
+                    local sig = abilitySave.signature()
+                    local normal, lucky = abilityBalances()
+                    if not sig or type(normal) ~= "number" or type(lucky) ~= "number" then
+                        abilitySave.notice("Menunggu inventori Style dan saldo Ability sebelum checkpoint")
+                        return false
+                    end
+                    local data = abilitySave.read()
+                    if data and data.origin ~= abilitySave.session then
+                        if data.style ~= sig then
+                            abilitySave.notice("Inventori Style berbeda dari checkpoint; spin/rollback Ability ditahan")
+                            return false
+                        end
+                        if data.rollback then
+                            -- Masih di sesi permintaan rollback: tunggu teleport atau retry
+                            -- setelah gagal/cooldown, bukan dianggap sudah masuk ulang.
+                            if data.rollbackSession == abilitySave.session then
+                                return true
+                            end
+                            -- Jangan mulai siklus baru jika saldo belum benar-benar pulih.
+                            if normal < data.normal or lucky < data.lucky then
+                                abilitySave.notice("Rollback belum memulihkan saldo Ability; menunggu sinkronisasi")
+                                return false
+                            end
+                            data.rollback = false
+                            data.rollbackSession = nil
+                            if not abilitySave.write(data) then return false end
+                            abilityStatus("Rollback terkonfirmasi; saldo Ability pulih: Normal="
+                                .. tostring(normal) .. " | Lucky=" .. tostring(lucky))
+                        end
+                        return true
+                    end
+                    -- Tidak membuat save baru dengan saldo 0: itu berisiko menyimpan
+                    -- keadaan yang sudah habis sebelum rollback dapat dilakukan.
+                    if normal <= 0 and lucky <= 0 then
+                        abilitySave.notice("Saldo Ability sudah 0 tanpa checkpoint tersimpan; tidak menebak pemulihan")
+                        return false
+                    end
+                    if abilitySave.inFlight or os.clock() - abilitySave.lastAttempt < 15 then return false end
+                    task.wait(0.6)
+                    if hasSecretAbility() ~= false or abilitySave.signature() ~= sig then return false end
+                    normal, lucky = abilityBalances()
+                    if type(normal) ~= "number" or type(lucky) ~= "number" or normal + lucky <= 0 then return false end
+                    if not abilitySave.write({origin=abilitySave.session, style=sig, normal=normal, lucky=lucky, rollback=false}) then
+                        abilitySave.notice("Tidak dapat menyimpan checkpoint Ability; spin ditahan")
+                        return false
+                    end
+                    abilitySave.lastAttempt = os.clock()
+                    abilitySave.inFlight = true
+                    abilityStatus("Simpan hasil Style: rejoin normal sebelum spin Ability")
+                    local ok, err = pcall(function() TPA:Teleport(game.PlaceId, playerA) end)
+                    if not ok then
+                        abilitySave.inFlight = false
+                        abilityStatus("Rejoin penyimpanan Ability gagal: " .. tostring(err))
+                    end
+                    return false
+                end
+                function abilitySave.rollback()
+                    if abilitySave.inFlight or os.clock() - abilitySave.lastAttempt < 15 then return end
+                    -- Sama seperti Style: konfirmasi inventori berulang agar Secret
+                    -- pada spin terakhir tidak ikut rollback karena delay sinkron.
+                    for _ = 1, 5 do
+                        task.wait(0.3)
+                        if hasSecretAbility() ~= false then return end
+                        local normal, lucky = abilityBalances()
+                        if type(normal) ~= "number" or type(lucky) ~= "number"
+                            or normal > 0 or lucky > 0 then return end
+                    end
+                    local data = abilitySave.read()
+                    if not data or data.origin == abilitySave.session
+                        or abilitySave.signature() ~= data.style then
+                        abilitySave.notice("Checkpoint Style belum terverifikasi; rollback Ability ditahan")
+                        return
+                    end
+                    if hasSecretAbility() ~= false then return end
+                    data.rollback = true
+                    data.rollbackSession = abilitySave.session
+                    if not abilitySave.write(data) then
+                        abilitySave.notice("Gagal menyimpan status rollback Ability; rollback ditahan")
+                        return
+                    end
+                    abilitySave.lastAttempt = os.clock()
+                    abilitySave.inFlight = true
+                    abilityStatus("Normal + Lucky Ability habis, Secret belum ada: ROLLBACK seperti Style")
+                    local ok, err = pcall(function()
+                        local remote = RSA:WaitForChild("Packages")
+                            :WaitForChild("_Index")
+                            :WaitForChild("sleitnick_knit@1.7.0")
+                            :WaitForChild("knit")
+                            :WaitForChild("Services")
+                            :WaitForChild("SettingsService")
+                            :WaitForChild("RF")
+                            :WaitForChild("UpdateKeybind")
+                        remote:InvokeServer("MouseButton1", true, "Spike\xE2\x80\x8B\x8F")
+                        TPA:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+                    end)
+                    if not ok then
+                        abilitySave.inFlight = false
+                        abilityStatus("Rollback Ability gagal: " .. tostring(err))
+                    end
+                end
                 local function runAbilitySecret()
                     -- Toggle independen dari SPIN_TWO_STYLES.
                     if not SPIN_SECRET_ABILITY then return end
@@ -1163,10 +1406,12 @@ do
                     abilityWorkerStarted = true
                     task.spawn(function()
                         local ok, err = pcall(function()
-                            while playerA.Parent do
+                            while playerA.Parent and not abilityWorkerFinished do
                                 local owned = hasSecretAbility()
                                 if owned == true then
                                     abilityWorkerFinished = true
+                                    finalReport.ability = abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY"
+                                    abilitySave.clear()
                                     abilityStatus("Minimal 1 Secret terkonfirmasi; tidak spin lagi")
                                     pcall(showPopup, nil,
                                         abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY")
@@ -1177,18 +1422,33 @@ do
                                         abilityStatus("Menunggu inventori / rarity Ability")
                                     end
                                     task.wait(1)
+                                elseif not abilitySave.initialGate() then
+                                    task.wait(1)
+                                elseif not abilitySave.ready() or abilitySave.inFlight then
+                                    task.wait(1)
                                 else
+                                    local normalNow, luckyNow = abilityBalances()
+                                    if type(normalNow) ~= "number" or type(luckyNow) ~= "number" then
+                                        task.wait(1)
+                                        continue
+                                    end
+                                    if normalNow <= 0 and luckyNow <= 0 then
+                                        abilitySave.rollback()
+                                        task.wait(1)
+                                        continue
+                                    end
                                     local slot, active = abilitySafeSlot()
                                     if slot == "SECRET" then
                                         abilityWorkerFinished = true
+                                        finalReport.ability = abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY"
+                                        abilitySave.clear()
                                         pcall(showPopup, nil,
                                             abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY")
                                         return
                                     elseif slot == false then
-                                        abilityWorkerFinished = true
-                                        abilityStatus("Tidak ada slot Ability aman")
+                                        abilitySave.notice("Tidak ada slot Ability aman; tunggu tanpa menimpa Ultra/Evo")
                                         pcall(showPopup, nil, "ABILITY_NO_SLOT")
-                                        return
+                                        task.wait(2)
                                     elseif type(slot) ~= "number" then
                                         if os.clock() - abilityLastReport > 10 then
                                             abilityLastReport = os.clock()
@@ -1208,6 +1468,8 @@ do
                                             -- Tidak pernah spin saat ada Secret dari slot lain.
                                             if hasSecretAbility() == true then
                                                 abilityWorkerFinished = true
+                                                finalReport.ability = abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY"
+                                                abilitySave.clear()
                                                 pcall(showPopup, nil,
                                                     abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY")
                                                 return
@@ -1228,10 +1490,8 @@ do
                                                 if type(remaining) ~= "number" then
                                                     task.wait(1)
                                                 elseif remaining <= 0 then
-                                                    abilityWorkerFinished = true
-                                                    abilityStatus("Saldo Spin Ability habis")
-                                                    pcall(showPopup, nil, "ABILITY_NO_SPINS")
-                                                    return
+                                                    abilitySave.rollback()
+                                                    task.wait(1)
                                                 else
                                                     local remote = findAbilityRemote("Roll")
                                                     if not remote then
@@ -1262,6 +1522,8 @@ do
                                                             end
                                                             if confirmed then
                                                                 abilityWorkerFinished = true
+                                                                finalReport.ability = abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY"
+                                                                abilitySave.clear()
                                                                 abilityStatus("Ability Secret berhasil terkonfirmasi di inventori")
                                                                 pcall(showPopup, nil, "ABILITY_FOUND")
                                                                 return
@@ -1299,6 +1561,8 @@ do
                         local owned = hasSecretAbility()
                         if owned == true then
                             abilityWorkerFinished = true
+                            finalReport.ability = abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY"
+                            abilitySave.clear()
                             abilityStatus("Secret sudah ada sejak awal, lewati pencarian Ability")
                             pcall(showPopup, nil, "ABILITY_ALREADY")
                             return
@@ -1354,50 +1618,7 @@ do
                     pcall(function() TPA:SetTeleportSetting(SAVE_KEY, "") end)
                 end
 
-                local rollbackInvoked = false
-                local function rollbackAbilityOnce()
-                    if rollbackInvoked then return end
-                    if hasFirstTarget() ~= true then return end
-                    local owned = hasSecretAbility()
-                    if owned == true then return end
-                    if owned == nil then
-                        warn("[ABILITY ADD-ON] Inventory Ability belum siap; rollback tidak dijalankan.")
-                        return
-                    end
-                    for _ = 1, 5 do
-                        task.wait(0.3)
-                        owned = hasSecretAbility()
-                        if owned == true then return end
-                        if owned == nil then
-                            warn("[ABILITY ADD-ON] Data Ability hilang saat pemeriksaan akhir.")
-                            return
-                        end
-                    end
-                    if hasFirstTarget() ~= true then return end
-                    owned = hasSecretAbility()
-                    if owned == true then return end
-                    if owned ~= false then return end
-                    rollbackInvoked = true
-                    local ok, err = pcall(function()
-                        local remote = RSA:WaitForChild("Packages")
-                            :WaitForChild("_Index")
-                            :WaitForChild("sleitnick_knit@1.7.0")
-                            :WaitForChild("knit")
-                            :WaitForChild("Services")
-                            :WaitForChild("SettingsService")
-                            :WaitForChild("RF")
-                            :WaitForChild("UpdateKeybind")
-                        remote:InvokeServer("MouseButton1", true, "Spike\xE2\x80\x8B\x8F")
-                        TPA:TeleportToPlaceInstance(game.PlaceId, game.JobId)
-                    end)
-                    if not ok then
-                        warn("[ABILITY ADD-ON] Rollback gagal: " .. tostring(err))
-                        playerA:Kick("Rollback gagal")
-                    end
-                end
-
-                -- Pengecekan rollback Ability lama dipertahankan; worker Ability Secret
-                -- v1.0.84 terpisah dan hanya mulai setelah Style selesai / STOP slot.
+                -- Rollback Ability ditangani oleh abilitySave.rollback() di worker aktif.
                 local lastSaveRejoinAttempt = -100
                 local saveRejoinInProgress = false
                 pcall(function()
@@ -1453,8 +1674,8 @@ do
                     end
                     return nil
                 end
-                local function hasSanju()
-                    local slots = readSignal(teamA.Styles)
+                hasSanju = function()
+                    local slots = readSignal(teamA and teamA.Styles)
                     if type(slots) ~= "table" then return nil end
                     for _, id in pairs(slots) do
                         if __vlIsSecond(getStyleName(id)) then return true end
@@ -2424,6 +2645,7 @@ do
                                     .. " (<=3): STOP tanpa spin, kirim webhook")
                                 notifyFinal(false, "LOW_LUCKY_SANJU")
                                 twinsFinished = true
+                                runAbilitySecret()
                                 return
                             end
                             if not commitToZero(luckyAtStart) then return end
@@ -2642,7 +2864,8 @@ do
                         local okTwins, twinsOwned = pcall(hasSanju)
                         if okTwins and twinsOwned == true and hasFirstTarget() == true then
                             pcall(showPopup)
-                            runAbilitySecret()
+                            -- Worker Style yang mencapai terminal memulai Ability;
+                            -- monitor ini tidak memicu rejoin saat Style masih aktif.
                             return
                         end
                         task.wait(1)
@@ -2652,6 +2875,8 @@ do
                 local secretAbilityMonitorStarted = false
                 local lastGateText, lastGateAt = nil, -100
                 while playerA.Parent do
+                    -- Retry final report after both terminal states, even if HTTP/inventory was delayed.
+                    notifyFinal()
                     if env[noSlotFirstOkazuKey] == true and hasFirstTarget() == false then
                         notifyFinal(false, "NO_SLOT_FIRST_THE_TWINS")
                         pcall(showPopup, nil, "NO_SLOT_STYLE1")
@@ -2725,7 +2950,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[STYLE v1.0.85-ABILITY-TOGGLE] Percobaan "
+                warn("[STYLE v1.0.87-ABILITY-MIN3-WEBHOOK] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2737,14 +2962,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.85-ABILITY-TOGGLE] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.87-ABILITY-MIN3-WEBHOOK] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.85-ABILITY-TOGGLE] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.87-ABILITY-MIN3-WEBHOOK] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
