@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.83-KISUKI-STYLE2-PEER: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.85-ABILITY-TOGGLE: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -28,6 +28,12 @@ local SECOND_STYLE_NAME = "Sanju" -- STYLE 2: target jika mode dua style aktif
 --         fase kedua menggunakan sisa saldo dengan batas maksimal 15.
 -- false = satu style; MAKSIMAL 30 Lucky untuk Style 1, fase kedua tidak aktif.
 local SPIN_TWO_STYLES = true
+
+-- true  = Cari minimal 1 Ability Secret setelah fase Style selesai/STOP.
+--         Jika sudah memiliki Secret, langsung popup tanpa spin Ability.
+-- false = Lewati seluruh pencarian/pemeriksaan/popup Ability Secret.
+--         Popup hasil Style tetap berjalan normal.
+local SPIN_SECRET_ABILITY = true
 
 local MAX_LUCKY_TOTAL = 30
 local MAX_LUCKY_STYLE_1 = SPIN_TWO_STYLES and math.ceil(MAX_LUCKY_TOTAL / 2) or MAX_LUCKY_TOTAL
@@ -70,6 +76,7 @@ end
 
 assert(__vlNormalizeStyleName(FIRST_STYLE_NAME) ~= "", "STYLE 1 kosong")
 assert(type(SPIN_TWO_STYLES) == "boolean", "SPIN_TWO_STYLES harus true atau false")
+assert(type(SPIN_SECRET_ABILITY) == "boolean", "SPIN_SECRET_ABILITY harus true atau false")
 if SPIN_TWO_STYLES then
     assert(__vlNormalizeStyleName(SECOND_STYLE_NAME) ~= "", "STYLE 2 kosong")
     assert(not __vlIsFirst(SECOND_STYLE_NAME), "STYLE 1 dan STYLE 2 tidak boleh sama")
@@ -81,7 +88,10 @@ print("[STYLE CONFIG] Mode=" .. (SPIN_TWO_STYLES and "DUA STYLE" or "SATU STYLE"
         and (tostring(MAX_LUCKY_STYLE_1) .. "+" .. tostring(MAX_LUCKY_STYLE_2)
             .. " (total maksimal " .. tostring(MAX_LUCKY_TOTAL) .. ")")
         or ("maksimal " .. tostring(MAX_LUCKY_STYLE_1) .. " untuk satu style"))
-    .. " | Pity dari GUI ID Scanner")
+    .. " | Pity dari GUI ID Scanner"
+    .. (SPIN_SECRET_ABILITY
+        and " | Ability Secret=AKTIF (minimal 1, cek inventori dulu)"
+        or " | Ability Secret=NONAKTIF (tanpa cek/spin/popup Ability)"))
 
 -- Integrasi SCAN GUI dari Style_IDScanner_All.lua.
 -- DisplayName/label hanya dipakai untuk MENCARI entri yang sesuai;
@@ -137,7 +147,7 @@ local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
     return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
 end
 
--- VERSION: v1.0.83-KISUKI-STYLE2-PEER | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
+-- VERSION: v1.0.85-ABILITY-TOGGLE | batas 30 Lucky / 15+15; Kisuki dan Style 2 fallback setara pada semua mode
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Yogan + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -320,16 +330,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.83-KISUKI-STYLE2-PEER: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.85-ABILITY-TOGGLE: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.83-KISUKI-STYLE2-PEER] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.85-ABILITY-TOGGLE] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.83-KISUKI-STYLE2-PEER] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.85-ABILITY-TOGGLE] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.83-KISUKI-STYLE2-PEER] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.85-ABILITY-TOGGLE] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -402,17 +412,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.83-KISUKI-STYLE2-PEER: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.85-ABILITY-TOGGLE: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.83-KISUKI-STYLE2-PEER] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.85-ABILITY-TOGGLE] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.83-KISUKI-STYLE2-PEER: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.85-ABILITY-TOGGLE: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -428,7 +438,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.83-KISUKI-STYLE2-PEER: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.85-ABILITY-TOGGLE: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -684,6 +694,8 @@ do
                     end
                 end)
 
+                -- Dynamic Ability lookup: data GetActive dapat berupa daftar
+                -- atau dictionary. Ambil rarity dari modul, bukan ID manual.
                 local function loadAbility()
                     if not abilityModA then
                         local content = RSA:FindFirstChild("Content")
@@ -699,31 +711,54 @@ do
                             pcall(function() abilityA = knit.GetController("AbilityController") end)
                         end
                     end
-                    if not abilityModA or not abilityA or not abilityA.Abilities or not abilityA.LuckySpins then
+                    if not abilityModA or not abilityA or not abilityA.Abilities then
                         return false
                     end
                     if not rarityMap then
                         local ok, active = pcall(function() return abilityModA:GetActive() end)
                         if not ok or type(active) ~= "table" then return false end
                         local map = {}
-                        for _, data in pairs(active) do
-                            if type(data) == "table" and type(data.Id) == "string" then
-                                map[data.Id] = data.Rarity
-                                abilityNames[data.Id] = data.DisplayName or data.Id
+                        for key, data in pairs(active) do
+                            if type(data) == "table" then
+                                local id = data.Id or data.ID or key
+                                if type(id) == "string" then
+                                    map[id] = data.Rarity
+                                    abilityNames[id] = data.DisplayName or id
+                                end
                             end
                         end
                         rarityMap = map
                     end
                     return true
                 end
-
+                local function lookupAbilityRarity(id)
+                    if type(id) ~= "string" then return nil end
+                    if not loadAbility() then return nil end
+                    if rarityMap and rarityMap[id] ~= nil then return rarityMap[id] end
+                    local ok, def = pcall(function() return abilityModA:Get(id) end)
+                    if ok and type(def) == "table" then
+                        if rarityMap then rarityMap[id] = def.Rarity end
+                        abilityNames[id] = def.DisplayName or id
+                        return def.Rarity
+                    end
+                    return nil
+                end
+                local function abilitySecretRarity(rarity)
+                    return rarity == 0 or (type(rarity) == "string"
+                        and rarity:lower() == "secret")
+                end
                 local function hasSecretAbility()
                     if not loadAbility() then return nil end
                     local slots = readSignal(abilityA.Abilities)
                     if type(slots) ~= "table" then return nil end
+                    local seen, unknown = false, false
                     for _, id in pairs(slots) do
-                        if rarityMap[id] == 0 then return true end
+                        seen = true
+                        local rarity = lookupAbilityRarity(id)
+                        if abilitySecretRarity(rarity) then return true end
+                        if rarity == nil then unknown = true end
                     end
+                    if not seen or unknown then return nil end
                     return false
                 end
 
@@ -742,7 +777,7 @@ do
                     local slots = readSignal(abilityA.Abilities)
                     if type(slots) ~= "table" then return nil end
                     for _, id in pairs(slots) do
-                        if rarityMap and rarityMap[id] == 0 then
+                        if abilitySecretRarity(lookupAbilityRarity(id)) then
                             return abilityNames[id] or tostring(id)
                         end
                     end
@@ -840,22 +875,17 @@ do
                 local noSlotFirstOkazuKey = "__VL_FIRST_THE_TWINS_NO_SLOT_" .. tostring(playerA.UserId) .. __vlConfigSuffix()
                 env["__VL_FINAL_NOTIFY_" .. tostring(playerA.UserId) .. __vlConfigSuffix()] = notifyFinal
 
-                showPopup = function(popupText)
-                    publishHistory("STYLE", FIRST_STYLE_NAME, true)
-                    if SPIN_TWO_STYLES then
-                        publishHistory("STYLE", SECOND_STYLE_NAME, true)
-                    end
-                    local ownedSlots = abilityA and abilityA.Abilities and readSignal(abilityA.Abilities)
-                    if type(ownedSlots) == "table" and type(rarityMap) == "table" then
-                        for _, abilityId in pairs(ownedSlots) do
-                            if rarityMap[abilityId] == 0 then
-                                publishHistory("ABILITY SECRET", abilityNames[abilityId] or abilityId, true)
-                                break
-                            end
-                        end
-                    end
-                    if displayed or playerGuiA:FindFirstChild(POPUP_NAME) then return end
-                    displayed = true
+                -- v1.0.84: setiap kondisi final mendapat popup sendiri; jika
+                -- dua kondisi terjadi berdekatan, popup ditampilkan berurutan.
+                -- Popup hasil STOP tidak menandai Style sebagai target berhasil.
+                local popupQueue, popupSeen = {}, {}
+                local popupOpen = false
+                local function pumpPopup()
+                    if popupOpen or #popupQueue == 0 or not playerA.Parent then return end
+                    popupOpen = true
+                    local item = table.remove(popupQueue, 1)
+                    local old = playerGuiA:FindFirstChild(POPUP_NAME)
+                    if old then old:Destroy() end
                     local doneGui = Instance.new("ScreenGui")
                     doneGui.Name = POPUP_NAME
                     doneGui.ResetOnSpawn = false
@@ -873,70 +903,412 @@ do
                     shade.Parent = doneGui
 
                     local card = Instance.new("Frame")
-                    card.Name = "SuccessCard"
+                    card.Name = "ResultCard"
                     card.AnchorPoint = Vector2.new(0.5, 0.5)
                     card.Position = UDim2.fromScale(0.5, 0.5)
-                    card.Size = UDim2.fromOffset(340, 118)
+                    card.Size = UDim2.fromOffset(365, 155)
                     card.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
                     card.BorderSizePixel = 0
                     card.Parent = shade
-                    local round = Instance.new("UICorner")
-                    round.CornerRadius = UDim.new(0, 10)
-                    round.Parent = card
+                    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
                     local border = Instance.new("UIStroke")
                     border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-                    border.Color = Color3.fromRGB(212, 175, 55)
-                    border.Thickness = 1.2
+                    border.Color = item.warning and Color3.fromRGB(236, 175, 77)
+                        or Color3.fromRGB(100, 211, 150)
+                    border.Thickness = 1.4
                     border.Parent = card
 
-                    local check = Instance.new("TextLabel")
-                    check.Name = "CheckIcon"
-                    check.Size = UDim2.fromOffset(25, 25)
-                    check.Position = UDim2.fromOffset(13, 14)
-                    check.BackgroundColor3 = Color3.fromRGB(39, 150, 95)
-                    check.BorderSizePixel = 0
-                    check.Text = "✓"
-                    check.TextSize = 18
-                    check.Font = Enum.Font.GothamBold
-                    check.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    check.Parent = card
-                    local circle = Instance.new("UICorner")
-                    circle.CornerRadius = UDim.new(1, 0)
-                    circle.Parent = check
+                    local titleLabel = Instance.new("TextLabel")
+                    titleLabel.Name = "StatusTitle"
+                    titleLabel.BackgroundTransparency = 1
+                    titleLabel.Position = UDim2.fromOffset(17, 13)
+                    titleLabel.Size = UDim2.new(1, -34, 0, 25)
+                    titleLabel.Text = item.title
+                    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+                    titleLabel.TextColor3 = item.warning and Color3.fromRGB(248, 190, 105)
+                        or Color3.fromRGB(160, 243, 195)
+                    titleLabel.Font = Enum.Font.GothamBold
+                    titleLabel.TextSize = 16
+                    titleLabel.Parent = card
 
                     local message = Instance.new("TextLabel")
                     message.Name = "Message"
                     message.BackgroundTransparency = 1
-                    message.Size = UDim2.fromOffset(284, 58)
-                    message.Position = UDim2.fromOffset(44, 10)
-                    message.Text = "Sudah Mendapatkan Target\n" .. tostring(popupText or (SPIN_TWO_STYLES and (FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME) or FIRST_STYLE_NAME))
+                    message.Position = UDim2.fromOffset(17, 42)
+                    message.Size = UDim2.new(1, -34, 0, 68)
+                    message.Text = item.detail
                     message.TextWrapped = true
                     message.TextYAlignment = Enum.TextYAlignment.Top
                     message.TextXAlignment = Enum.TextXAlignment.Left
                     message.TextColor3 = Color3.fromRGB(245, 245, 245)
-                    message.Font = Enum.Font.GothamBold
-                    message.TextSize = 14
+                    message.Font = Enum.Font.Gotham
+                    message.TextSize = 13
                     message.Parent = card
 
                     local okButton = Instance.new("TextButton")
                     okButton.Name = "OK"
                     okButton.AnchorPoint = Vector2.new(1, 1)
-                    okButton.Position = UDim2.new(1, -12, 1, -11)
-                    okButton.Size = UDim2.fromOffset(65, 28)
+                    okButton.Position = UDim2.new(1, -13, 1, -12)
+                    okButton.Size = UDim2.fromOffset(74, 29)
                     okButton.BackgroundColor3 = Color3.fromRGB(212, 175, 55)
-                    okButton.BorderSizePixel = 0
                     okButton.Text = "OK"
-                    okButton.TextColor3 = Color3.fromRGB(0, 0, 0)
                     okButton.Font = Enum.Font.GothamBold
                     okButton.TextSize = 13
+                    okButton.TextColor3 = Color3.fromRGB(0, 0, 0)
                     okButton.Parent = card
-                    local okRound = Instance.new("UICorner")
-                    okRound.CornerRadius = UDim.new(0, 6)
-                    okRound.Parent = okButton
+                    Instance.new("UICorner", okButton).CornerRadius = UDim.new(0, 6)
                     okButton.Activated:Connect(function()
                         if doneGui.Parent then doneGui:Destroy() end
+                        popupOpen = false
+                        pumpPopup()
                     end)
                 end
+                showPopup = function(detail, kind)
+                    kind = kind or "STYLES_COMPLETE"
+                    -- Nonaktifkan hanya popup Ability; popup Style tidak terpengaruh.
+                    if not SPIN_SECRET_ABILITY and kind:sub(1, 8) == "ABILITY_" then return end
+                    if popupSeen[kind] then return end
+                    if kind == "STYLES_COMPLETE" then
+                        if hasFirstTarget() ~= true then return end
+                        if SPIN_TWO_STYLES and hasSanju() ~= true then return end
+                        publishHistory("STYLE", FIRST_STYLE_NAME, true)
+                        if SPIN_TWO_STYLES then publishHistory("STYLE", SECOND_STYLE_NAME, true) end
+                    elseif kind == "ABILITY_ALREADY" or kind == "ABILITY_FOUND" then
+                        if hasSecretAbility() ~= true then return end
+                        publishHistory("ABILITY SECRET", knownSecretName() or "Secret", true)
+                    end
+                    local title, body, warning
+                    if kind == "NO_SLOT_STYLE1" then
+                        title, body, warning = "STOP - Slot Style 1 penuh",
+                            "Tidak ada slot yang boleh ditimpa untuk mencari " .. FIRST_STYLE_NAME
+                            .. ". Style 1 belum didapat.", true
+                    elseif kind == "NO_SLOT_STYLE2" then
+                        title, body, warning = "STOP - Slot Style 2 penuh",
+                            "Tidak ada slot yang boleh ditimpa untuk mencari " .. SECOND_STYLE_NAME
+                            .. ". " .. FIRST_STYLE_NAME .. " tetap disimpan.", true
+                    elseif kind == "ABILITY_ALREADY" then
+                        title, body = "Ability Secret sudah ada",
+                            "Sudah memiliki minimal 1 Ability Secret: "
+                            .. tostring(knownSecretName() or "Secret") .. ". Tidak spin Ability lagi."
+                    elseif kind == "ABILITY_FOUND" then
+                        title, body = "Ability Secret didapat!",
+                            "Target minimal 1 Ability Secret terpenuhi: "
+                            .. tostring(knownSecretName() or "Secret") .. ". Spin Ability dihentikan."
+                    elseif kind == "ABILITY_NO_SLOT" then
+                        title, body, warning = "STOP - Slot Ability penuh",
+                            "Tidak ada slot Ability yang aman untuk spin. Ability langka tetap dilindungi.", true
+                    elseif kind == "ABILITY_NO_SPINS" then
+                        title, body, warning = "STOP - Spin Ability habis",
+                            "Belum mendapatkan Ability Secret dan saldo Spin Ability sudah habis.", true
+                    else
+                        title, body = "Sudah Mendapatkan Target",
+                            SPIN_TWO_STYLES and (FIRST_STYLE_NAME .. " + " .. SECOND_STYLE_NAME)
+                            or FIRST_STYLE_NAME
+                    end
+                    if type(detail) == "string" and detail ~= ""
+                        and kind ~= "STYLES_COMPLETE" then
+                        body = body .. "\n" .. detail
+                    end
+                    popupSeen[kind] = true
+                    popupQueue[#popupQueue + 1] = {title=title, detail=body, warning=warning}
+                    pumpPopup()
+                end
+
+                -- v1.0.85: Ability hanya berjalan jika SPIN_SECRET_ABILITY=true setelah Style berakhir (sukses / NO SLOT).
+                -- Cek Secret lebih dahulu. Jangan spin ulang bila sudah punya 1.
+                local abilityWorkerStarted = false
+                local abilityWorkerFinished = false
+                local abilityLockedSlot = nil
+                local abilityHasRolled = false
+                local abilityLastReport = -100
+
+                local function abilityStatus(message)
+                    twinsStatus("[ABILITY SECRET] " .. tostring(message))
+                end
+                local function abilityRarity(id)
+                    return lookupAbilityRarity(id)
+                end
+                local function abilityRarityNumber(id)
+                    local rarity = abilityRarity(id)
+                    if type(rarity) == "number" then return rarity end
+                    local names = {common=5, rare=4, epic=3, legendary=2, godly=1,
+                        secret=0, ultra=-1, evo=-2, evolution=-2}
+                    if type(rarity) == "string" then return names[rarity:lower()] end
+                    return nil
+                end
+                local function abilityInventory()
+                    if not loadAbility() then return nil end
+                    return readSignal(abilityA.Abilities)
+                end
+                local function getAbilityActiveSlot()
+                    local current = abilityA and (abilityA.CurrentAbilitySlot
+                        or abilityA.CurrentSlot or abilityA.SelectedAbilitySlot)
+                    if not current then
+                        current = teamA and (teamA.CurrentAbilitySlot or teamA.SelectedAbilitySlot)
+                    end
+                    if type(current) == "number" then return current end
+                    return tonumber(readSignal(current))
+                end
+                local function findAbilityRemote(remoteName)
+                    local packages = RSA:FindFirstChild("Packages")
+                    local index = packages and packages:FindFirstChild("_Index")
+                    if not index then return nil end
+                    for _, folder in ipairs(index:GetChildren()) do
+                        local knitFolder = folder:FindFirstChild("knit")
+                        local services = knitFolder and knitFolder:FindFirstChild("Services")
+                        local service = services and services:FindFirstChild("AbilityService")
+                        local rf = service and service:FindFirstChild("RF")
+                        local remote = rf and rf:FindFirstChild(remoteName)
+                        if remote and remote:IsA("RemoteFunction") then return remote end
+                    end
+                    return nil
+                end
+                local function abilitySafeSlot()
+                    local slots = abilityInventory()
+                    if type(slots) ~= "table" then return nil, "Inventori Ability belum siap" end
+                    if hasSecretAbility() == true then return "SECRET" end
+                    -- Slot yang sebelumnya sudah dipilih aman tetap menjadi
+                    -- target spin sampai Secret, walaupun hasil sementara Ultra/Evo.
+                    if abilityLockedSlot then
+                        local id = slots[abilityLockedSlot] or slots[tostring(abilityLockedSlot)]
+                        if type(id) ~= "string" then
+                            return nil, "Slot Ability terkunci belum tersedia"
+                        end
+                        local active = getAbilityActiveSlot()
+                        if not active then
+                            local count = 0
+                            for key in pairs(slots) do
+                                if tonumber(key) then count += 1 end
+                            end
+                            if count == 1 then active = abilityLockedSlot end
+                        end
+                        if not active then
+                            return nil, "Tidak dapat memverifikasi slot Ability aktif"
+                        end
+                        return abilityLockedSlot, active
+                    end
+                    local entries = {}
+                    local unknown = false
+                    for key, id in pairs(slots) do
+                        local idx = tonumber(key)
+                        if idx and idx >= 1 and idx % 1 == 0 then
+                            if type(id) ~= "string" then
+                                unknown = true
+                            else
+                                local rarity = abilityRarityNumber(id)
+                                if rarity == nil then unknown = true
+                                elseif rarity > 0 then
+                                    entries[#entries + 1] = {slot=idx, rank=6-rarity}
+                                end
+                            end
+                        end
+                    end
+                    if #entries == 0 then
+                        if unknown then return nil, "Rarity Ability belum terbaca" end
+                        local slotCount = 0
+                        for key in pairs(slots) do
+                            if tonumber(key) then slotCount += 1 end
+                        end
+                        if slotCount == 0 then
+                            return nil, "Slot Ability belum dimuat"
+                        end
+                        return false, "NO_SLOT"
+                    end
+                    table.sort(entries, function(a,b)
+                        if a.rank ~= b.rank then return a.rank < b.rank end
+                        return a.slot < b.slot
+                    end)
+                    local active = getAbilityActiveSlot()
+                    local chosen = entries[1].slot
+                    if not active then
+                        -- Satu slot tidak membutuhkan pemindahan jika hanya satu
+                        -- entri; selain itu tahan spin agar tidak menimpa slot lain.
+                        local n = 0
+                        for key in pairs(slots) do if tonumber(key) then n += 1 end end
+                        if n ~= 1 then
+                            return nil, "CurrentAbilitySlot belum tersedia; tidak menebak slot aktif"
+                        end
+                        abilityLockedSlot = chosen
+                        return chosen, chosen
+                    end
+                    -- Jika slot aktif memiliki prioritas setara, jangan pindah.
+                    for _, e in ipairs(entries) do
+                        if e.slot == active and e.rank == entries[1].rank then
+                            chosen = active; break
+                        end
+                    end
+                    return chosen, active
+                end
+                local function selectAbilitySlot(slot, active)
+                    if slot == active then return true end
+                    local remote = findAbilityRemote("SelectSlot")
+                    if not remote then return false, "AbilityService.SelectSlot tidak ditemukan" end
+                    local ok, result = pcall(remote.InvokeServer, remote, slot)
+                    if not ok or result == false then return false, tostring(result) end
+                    for _ = 1, 35 do
+                        if getAbilityActiveSlot() == slot then return true end
+                        task.wait(0.2)
+                    end
+                    return false, "Perubahan slot Ability tidak terkonfirmasi"
+                end
+                local function abilityBalances()
+                    local normal = abilityA and abilityA.Spins and readSignal(abilityA.Spins)
+                    local lucky = abilityA and abilityA.LuckySpins and readSignal(abilityA.LuckySpins)
+                    return normal, lucky
+                end
+                local function runAbilitySecret()
+                    -- Toggle independen dari SPIN_TWO_STYLES.
+                    if not SPIN_SECRET_ABILITY then return end
+                    if abilityWorkerStarted or abilityWorkerFinished then return end
+                    abilityWorkerStarted = true
+                    task.spawn(function()
+                        local ok, err = pcall(function()
+                            while playerA.Parent do
+                                local owned = hasSecretAbility()
+                                if owned == true then
+                                    abilityWorkerFinished = true
+                                    abilityStatus("Minimal 1 Secret terkonfirmasi; tidak spin lagi")
+                                    pcall(showPopup, nil,
+                                        abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY")
+                                    return
+                                elseif owned == nil then
+                                    if os.clock() - abilityLastReport > 10 then
+                                        abilityLastReport = os.clock()
+                                        abilityStatus("Menunggu inventori / rarity Ability")
+                                    end
+                                    task.wait(1)
+                                else
+                                    local slot, active = abilitySafeSlot()
+                                    if slot == "SECRET" then
+                                        abilityWorkerFinished = true
+                                        pcall(showPopup, nil,
+                                            abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY")
+                                        return
+                                    elseif slot == false then
+                                        abilityWorkerFinished = true
+                                        abilityStatus("Tidak ada slot Ability aman")
+                                        pcall(showPopup, nil, "ABILITY_NO_SLOT")
+                                        return
+                                    elseif type(slot) ~= "number" then
+                                        if os.clock() - abilityLastReport > 10 then
+                                            abilityLastReport = os.clock()
+                                            abilityStatus(tostring(active or "Menunggu pemilihan slot Ability"))
+                                        end
+                                        task.wait(1)
+                                    else
+                                        local selected, reason = selectAbilitySlot(slot, active)
+                                        if not selected then
+                                            if os.clock() - abilityLastReport > 10 then
+                                                abilityLastReport = os.clock()
+                                                abilityStatus("Tahan spin: " .. tostring(reason))
+                                            end
+                                            task.wait(1)
+                                        else
+                                            abilityLockedSlot = slot
+                                            -- Tidak pernah spin saat ada Secret dari slot lain.
+                                            if hasSecretAbility() == true then
+                                                abilityWorkerFinished = true
+                                                pcall(showPopup, nil,
+                                                    abilityHasRolled and "ABILITY_FOUND" or "ABILITY_ALREADY")
+                                                return
+                                            end
+                                            local normal, lucky = abilityBalances()
+                                            if (abilityA.Spins and type(normal) ~= "number")
+                                                or (abilityA.LuckySpins and type(lucky) ~= "number") then
+                                                task.wait(1)
+                                            elseif (type(normal) ~= "number" and type(lucky) ~= "number") then
+                                                if os.clock() - abilityLastReport > 10 then
+                                                    abilityLastReport = os.clock()
+                                                    abilityStatus("Spins / LuckySpins Ability belum sinkron")
+                                                end
+                                                task.wait(1)
+                                            else
+                                                local useLucky = (type(normal) ~= "number" or normal <= 0)
+                                                local remaining = useLucky and lucky or normal
+                                                if type(remaining) ~= "number" then
+                                                    task.wait(1)
+                                                elseif remaining <= 0 then
+                                                    abilityWorkerFinished = true
+                                                    abilityStatus("Saldo Spin Ability habis")
+                                                    pcall(showPopup, nil, "ABILITY_NO_SPINS")
+                                                    return
+                                                else
+                                                    local remote = findAbilityRemote("Roll")
+                                                    if not remote then
+                                                        if os.clock() - abilityLastReport > 10 then
+                                                            abilityLastReport = os.clock()
+                                                            abilityStatus("AbilityService.Roll belum tersedia; tidak menebak remote")
+                                                        end
+                                                        task.wait(1)
+                                                    else
+                                                        local success, result = pcall(remote.InvokeServer, remote, useLucky)
+                                                        if not success or result == false then
+                                                            abilityStatus("Roll ditolak: " .. tostring(result))
+                                                            task.wait(1)
+                                                        else
+                                                            abilityHasRolled = true
+                                                            local confirmed = false
+                                                            local balanceMoved = false
+                                                            for _ = 1, 35 do
+                                                                if hasSecretAbility() == true then
+                                                                    confirmed = true; break
+                                                                end
+                                                                local afterN, afterL = abilityBalances()
+                                                                local after = useLucky and afterL or afterN
+                                                                if type(after) == "number" and after < remaining then
+                                                                    balanceMoved = true; break
+                                                                end
+                                                                task.wait(0.2)
+                                                            end
+                                                            if confirmed then
+                                                                abilityWorkerFinished = true
+                                                                abilityStatus("Ability Secret berhasil terkonfirmasi di inventori")
+                                                                pcall(showPopup, nil, "ABILITY_FOUND")
+                                                                return
+                                                            end
+                                                            if not balanceMoved then
+                                                                abilityStatus("Saldo belum berubah; tahan spin berikutnya")
+                                                                task.wait(2)
+                                                            else
+                                                                abilityStatus("Spin selesai, belum Secret; lanjut slot " .. tostring(slot))
+                                                                task.wait(0.55)
+                                                            end
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+                        if not ok then
+                            abilityStatus("ERROR worker: " .. tostring(err))
+                        end
+                        abilityWorkerStarted = false
+                    end)
+                end
+                -- Dipakai dari worker Style 1 yang berada pada scope berbeda.
+                env["__VL_ABILITY_START_AFTER_STYLE_" .. tostring(playerA.UserId)
+                    .. __vlConfigSuffix()] = runAbilitySecret
+                if SPIN_SECRET_ABILITY then
+                task.spawn(function()
+                    -- Secret yang sudah ada wajib langsung dilaporkan, bahkan
+                    -- apabila pencarian Style masih berjalan.
+                    while playerA.Parent and not abilityWorkerFinished do
+                        local owned = hasSecretAbility()
+                        if owned == true then
+                            abilityWorkerFinished = true
+                            abilityStatus("Secret sudah ada sejak awal, lewati pencarian Ability")
+                            pcall(showPopup, nil, "ABILITY_ALREADY")
+                            return
+                        elseif owned == false then
+                            return -- Belum ada; tunggu Style selesai sebelum spin.
+                        end
+                        task.wait(1)
+                    end
+                end)
+                end -- SPIN_SECRET_ABILITY: tidak membuat monitor Ability ketika false
 
                 local function readStage()
                     local raw
@@ -1024,8 +1396,8 @@ do
                     end
                 end
 
-                -- (Fungsi AutoSpin Ability lama dipertahankan agar struktur sama;
-                -- versi ini tidak memanggilnya.)
+                -- Pengecekan rollback Ability lama dipertahankan; worker Ability Secret
+                -- v1.0.84 terpisah dan hanya mulai setelah Style selesai / STOP slot.
                 local lastSaveRejoinAttempt = -100
                 local saveRejoinInProgress = false
                 pcall(function()
@@ -1941,8 +2313,9 @@ do
                     finishToZero()
                     notifyFinal(true)
                     twinsFinished = true
-                    -- v1.0.68: popup hanya bila Yogan + Sanju sudah dimiliki.
+                    -- Target dua style lengkap: popup lalu lanjut cek Ability.
                     pcall(showPopup)
+                    runAbilitySecret()
                 end
 
                 -- Tidak ada slot aman: selesai dengan Yogan saja, TANPA spin,
@@ -1958,6 +2331,8 @@ do
                     twinsStatus("STOP " .. SECOND_STYLE_NAME .. ": tidak ada slot aman. Webhook final " .. FIRST_STYLE_NAME .. " saja. "
                         .. tostring(detail or reason))
                     notifyFinal(false, "NO_SLOT_SANJU")
+                    pcall(showPopup, tostring(detail or reason or ""), "NO_SLOT_STYLE2")
+                    runAbilitySecret()
                     return true
                 end
 
@@ -2267,6 +2642,7 @@ do
                         local okTwins, twinsOwned = pcall(hasSanju)
                         if okTwins and twinsOwned == true and hasFirstTarget() == true then
                             pcall(showPopup)
+                            runAbilitySecret()
                             return
                         end
                         task.wait(1)
@@ -2276,8 +2652,10 @@ do
                 local secretAbilityMonitorStarted = false
                 local lastGateText, lastGateAt = nil, -100
                 while playerA.Parent do
-                    if env[noSlotFirstOkazuKey] == true then
+                    if env[noSlotFirstOkazuKey] == true and hasFirstTarget() == false then
                         notifyFinal(false, "NO_SLOT_FIRST_THE_TWINS")
+                        pcall(showPopup, nil, "NO_SLOT_STYLE1")
+                        runAbilitySecret()
                     end
                     local mamori = hasFirstTarget()
                     if not twinsLaunched and not twinsFinished then
@@ -2331,6 +2709,7 @@ do
                                             .. " terkonfirmasi; Style 2 dinonaktifkan. SELESAI")
                                         pcall(showPopup, FIRST_STYLE_NAME)
                                         notifyFinal(false, "SINGLE_STYLE_DONE")
+                                        runAbilitySecret()
                                     end
                                 elseif not twinsLaunched and not twinsFinished then
                                     -- Mode dua style: alur asli v1.0.78 tidak diubah.
@@ -2346,7 +2725,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[STYLE v1.0.83-KISUKI-STYLE2-PEER] Percobaan "
+                warn("[STYLE v1.0.85-ABILITY-TOGGLE] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2358,14 +2737,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.83-KISUKI-STYLE2-PEER] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.85-ABILITY-TOGGLE] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.83-KISUKI-STYLE2-PEER] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.85-ABILITY-TOGGLE] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
