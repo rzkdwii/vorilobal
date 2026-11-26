@@ -1,5 +1,5 @@
 if not game:IsLoaded() then game.Loaded:Wait() end
--- v1.0.87-ABILITY-MIN3-WEBHOOK: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
+-- v1.0.88-ABILITY-CHECKPOINT-FIX: kompatibilitas getter UI.Cell (dikonfirmasi oleh TEST V3).
 -- Fungsi Cell dibaca melalui cell(), bukan metode get.
 -- Signal object lama tetap didukung; nil/error tidak diubah menjadi saldo 0.
 local function __vlReadCell(cell)
@@ -150,7 +150,7 @@ local function __vlResolveStylePityId(_unusedStyleMod, displayName, pityList)
     return nil, "Scanner: nama " .. displayName .. " belum muncul pada daftar Secret Pity"
 end
 
--- VERSION: v1.0.87-ABILITY-MIN3-WEBHOOK | Lucky Ability awal <=2 STOP; webhook tunggu hasil final; Style tetap 30 Lucky / 15+15
+-- VERSION: v1.0.88-ABILITY-CHECKPOINT-FIX | migrasi checkpoint lama + perbaikan budget -1; batas Lucky dan webhook tetap
 -- v1.0.68: popup "Sudah Mendapatkan Target" hanya muncul bila Yogan + Sanju dimiliki; tidak lagi terkait webhook.
 -- v1.0.67: popup "Webhook terkirim" hanya muncul setelah webhook final berhasil; pemicu popup lama dihapus.
 -- FIX 1.0.49: self-recover startup/team/Return gate + visible leveling diagnostics.
@@ -195,8 +195,14 @@ local function makePersistentLuckyBudget(userId, phase, maximum)
         if last == -1 then state.last = nil end
         state.rollbackPending = pending == "1"
         -- Budget lama yang telah terpakai dipertahankan sampai rollback.
-        state.limit = legacy and (used > 0 and maximum or nil)
-            or (limit == -1 and nil or limit)
+        -- Lua: (true and nil or -1) menghasilkan -1, bukan nil.
+        if legacy then
+            state.limit = used > 0 and maximum or nil
+        elseif limit == -1 then
+            state.limit = nil
+        else
+            state.limit = limit
+        end
         -- Data budget lama bisa mencatat limit 30 untuk tiap fase.
         -- Turunkan ke limit baru TANPA menghapus jumlah Lucky yang telah dipakai.
         if type(state.limit) == "number" then
@@ -333,16 +339,16 @@ do
                     b.TextSize = 12
                     b.TextWrapped = true
                     b.ZIndex = 50
-                    b.Text = "TWINS v1.0.87-ABILITY-MIN3-WEBHOOK: AutoExecute masuk; menunggu inisialisasi..."
+                    b.Text = "TWINS v1.0.88-ABILITY-CHECKPOINT-FIX: AutoExecute masuk; menunggu inisialisasi..."
                     b.Parent = screen
                     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
                 end
-                print("[TWINS BOOT v1.0.87-ABILITY-MIN3-WEBHOOK] File mulai dijalankan; panel awal dibuat")
+                print("[TWINS BOOT v1.0.88-ABILITY-CHECKPOINT-FIX] File mulai dijalankan; panel awal dibuat")
             end)
-            if not ok then warn("[TWINS BOOT v1.0.87-ABILITY-MIN3-WEBHOOK] " .. tostring(err)) end
+            if not ok then warn("[TWINS BOOT v1.0.88-ABILITY-CHECKPOINT-FIX] " .. tostring(err)) end
         end)
     end)
-    if not okBoot then warn("[TWINS BOOT v1.0.87-ABILITY-MIN3-WEBHOOK] " .. tostring(errBoot)) end
+    if not okBoot then warn("[TWINS BOOT v1.0.88-ABILITY-CHECKPOINT-FIX] " .. tostring(errBoot)) end
 end
 
 -- =====================================================================
@@ -415,17 +421,17 @@ do
                     end
                     twinsDebugButton = button
                     button.Visible = true
-                    button.Text = "TWINS v1.0.87-ABILITY-MIN3-WEBHOOK: " .. twinsLastStatus .. "\nTap untuk COPY debug"
+                    button.Text = "TWINS v1.0.88-ABILITY-CHECKPOINT-FIX: " .. twinsLastStatus .. "\nTap untuk COPY debug"
                     return true
                 end
                 local function twinsStatus(message)
                     twinsLastStatus = tostring(message)
-                    local line = "[TWINS v1.0.87-ABILITY-MIN3-WEBHOOK] " .. twinsLastStatus
+                    local line = "[TWINS v1.0.88-ABILITY-CHECKPOINT-FIX] " .. twinsLastStatus
                     twinsLogs[#twinsLogs + 1] = line
                     if #twinsLogs > 120 then table.remove(twinsLogs, 1) end
                     print(line)
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "TWINS v1.0.87-ABILITY-MIN3-WEBHOOK: " .. twinsLastStatus
+                        twinsDebugButton.Text = "TWINS v1.0.88-ABILITY-CHECKPOINT-FIX: " .. twinsLastStatus
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -441,7 +447,7 @@ do
                     if #twinsLogs > 350 then table.remove(twinsLogs, 1) end
                     twinsLastStatus = line
                     if twinsDebugButton and twinsDebugButton.Parent then
-                        twinsDebugButton.Text = "v1.0.87-ABILITY-MIN3-WEBHOOK: " .. line:sub(1, 170)
+                        twinsDebugButton.Text = "v1.0.88-ABILITY-CHECKPOINT-FIX: " .. line:sub(1, 170)
                             .. "\nTap untuk COPY debug"
                     end
                 end
@@ -861,6 +867,9 @@ do
                             if finalReport.ability == "ABILITY_LOW_LUCKY" then
                                 abilityResult = "STOP TOTAL: Lucky Ability awal "
                                     .. tostring(finalReport.lucky) .. " (<=2); tanpa spin"
+                            elseif finalReport.ability == "ABILITY_ROLLBACK_FAILED" then
+                                abilityResult = "STOP: rollback Ability tidak memulihkan saldo; "
+                                    .. tostring(finalReport.abilityDetail or "periksa debug")
                             elseif finalReport.ability == "ABILITY_FOUND" then
                                 abilityResult = "SELESAI: Secret didapat melalui spin"
                             else
@@ -1031,6 +1040,9 @@ do
                     elseif kind == "ABILITY_LOW_LUCKY" then
                         title, body, warning = "STOP TOTAL - Lucky Ability <=2",
                             "Lucky Ability awal terlalu sedikit dan belum ada Secret. Tidak spin atau rollback.", true
+                    elseif kind == "ABILITY_ROLLBACK_FAILED" then
+                        title, body, warning = "STOP - Rollback Ability gagal",
+                            "Saldo tidak pulih. Spin ditahan untuk melindungi sisa saldo; checkpoint dipertahankan.", true
                     elseif kind == "ABILITY_NO_SLOT" then
                         title, body, warning = "TUNGGU - Slot Ability penuh",
                             "Tidak ada slot Ability yang aman untuk spin. Ability langka tetap dilindungi; pencarian ditahan.", true
@@ -1319,11 +1331,66 @@ do
                             end
                             -- Jangan mulai siklus baru jika saldo belum benar-benar pulih.
                             if normal < data.normal or lucky < data.lucky then
-                                abilitySave.notice("Rollback belum memulihkan saldo Ability; menunggu sinkronisasi")
+                                -- Tunggu angka yang stabil sebelum membedakan sinkronisasi
+                                -- lambat dari checkpoint lama yang tidak cocok.
+                                local balanceKey = tostring(normal) .. ":" .. tostring(lucky)
+                                    .. ":" .. tostring(data.normal) .. ":" .. tostring(data.lucky)
+                                    .. ":" .. tostring(data.rollbackSession)
+                                local now = os.clock()
+                                if abilitySave.mismatchKey ~= balanceKey then
+                                    abilitySave.mismatchKey = balanceKey
+                                    abilitySave.mismatchSince = now
+                                end
+                                local detail = "Normal=" .. tostring(normal) .. "/" .. tostring(data.normal)
+                                    .. " | Lucky=" .. tostring(lucky) .. "/" .. tostring(data.lucky)
+                                abilitySave.notice("Rollback belum memulihkan saldo Ability; " .. detail)
+                                if now - abilitySave.mismatchSince < 25 then return false end
+                                if hasSecretAbility() ~= false or abilitySave.signature() ~= sig then return false end
+                                local checkNormal, checkLucky = abilityBalances()
+                                if checkNormal ~= normal or checkLucky ~= lucky or normal < 0 or lucky < 0 then
+                                    return false
+                                end
+                                if data.schema ~= 188 and lucky >= MIN_LUCKY_ABILITY_START then
+                                    -- Migrasi checkpoint pending dari v1.0.86/87 saja.
+                                    -- Bukan mengklaim saldo telah pulih. Buat baseline baru
+                                    -- dengan saldo yang benar-benar ada, lalu rejoin normal.
+                                    local fresh = {origin=abilitySave.session, style=sig,
+                                        normal=normal, lucky=lucky, rollback=false, schema=188}
+                                    if not abilitySave.write(fresh) then
+                                        abilitySave.notice("Gagal memperbarui checkpoint lama; spin ditahan")
+                                        return false
+                                    end
+                                    abilitySave.allowed = nil
+                                    abilitySave.mismatchKey = nil
+                                    abilityStatus("Checkpoint rollback lama tidak cocok: " .. detail
+                                        .. "; gunakan saldo aktual sebagai baseline baru, rejoin sebelum spin")
+                                    return false
+                                end
+                                if data.schema ~= 188 and lucky < MIN_LUCKY_ABILITY_START then
+                                    -- Saldo awal siklus baru tidak cukup. Tidak spin atau
+                                    -- mencoba rollback yang tidak terverifikasi.
+                                    abilityWorkerFinished = true
+                                    finalReport.ability = "ABILITY_LOW_LUCKY"
+                                    finalReport.lucky = lucky
+                                    abilitySave.clear()
+                                    abilityStatus("STOP TOTAL: saldo aktual Lucky Ability " .. tostring(lucky)
+                                        .. " (<=2); checkpoint lama tidak pulih; " .. detail)
+                                    pcall(showPopup, "Saldo aktual: " .. detail, "ABILITY_LOW_LUCKY")
+                                    return false
+                                end
+                                -- Rollback yang dibuat versi ini benar-benar gagal pulih.
+                                -- Jangan menghabiskan saldo sisa atau mengirim sukses palsu.
+                                abilityWorkerFinished = true
+                                finalReport.ability = "ABILITY_ROLLBACK_FAILED"
+                                finalReport.abilityDetail = detail
+                                abilityStatus("STOP: rollback Ability gagal memulihkan saldo; " .. detail)
+                                pcall(showPopup, detail, "ABILITY_ROLLBACK_FAILED")
                                 return false
                             end
+                            abilitySave.mismatchKey = nil
                             data.rollback = false
                             data.rollbackSession = nil
+                            data.schema = 188
                             if not abilitySave.write(data) then return false end
                             abilityStatus("Rollback terkonfirmasi; saldo Ability pulih: Normal="
                                 .. tostring(normal) .. " | Lucky=" .. tostring(lucky))
@@ -1341,7 +1408,7 @@ do
                     if hasSecretAbility() ~= false or abilitySave.signature() ~= sig then return false end
                     normal, lucky = abilityBalances()
                     if type(normal) ~= "number" or type(lucky) ~= "number" or normal + lucky <= 0 then return false end
-                    if not abilitySave.write({origin=abilitySave.session, style=sig, normal=normal, lucky=lucky, rollback=false}) then
+                    if not abilitySave.write({origin=abilitySave.session, style=sig, normal=normal, lucky=lucky, rollback=false, schema=188}) then
                         abilitySave.notice("Tidak dapat menyimpan checkpoint Ability; spin ditahan")
                         return false
                     end
@@ -1375,6 +1442,7 @@ do
                     if hasSecretAbility() ~= false then return end
                     data.rollback = true
                     data.rollbackSession = abilitySave.session
+                    data.schema = 188
                     if not abilitySave.write(data) then
                         abilitySave.notice("Gagal menyimpan status rollback Ability; rollback ditahan")
                         return
@@ -2950,7 +3018,7 @@ do
             if okMain then break end
             startupFailures += 1
             if not okMain then
-                warn("[STYLE v1.0.87-ABILITY-MIN3-WEBHOOK] Percobaan "
+                warn("[STYLE v1.0.88-ABILITY-CHECKPOINT-FIX] Percobaan "
                     .. tostring(startupFailures) .. "/12: " .. tostring(errMain))
                 pcall(function()
                     local plr = game:GetService("Players").LocalPlayer
@@ -2962,14 +3030,14 @@ do
                 if startupFailures < 12 then
                     task.wait(math.min(2 * startupFailures, 12))
                 else
-                    warn("[TWINS v1.0.87-ABILITY-MIN3-WEBHOOK] Inisialisasi gagal 12x; buka log atau jalankan manual")
+                    warn("[TWINS v1.0.88-ABILITY-CHECKPOINT-FIX] Inisialisasi gagal 12x; buka log atau jalankan manual")
                     env[RUN_KEY] = nil
                 end
             end
             end
         end)
     else
-        warn("[TWINS v1.0.87-ABILITY-MIN3-WEBHOOK] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
+        warn("[TWINS v1.0.88-ABILITY-CHECKPOINT-FIX] Add-on sudah aktif di server yang sama; jalankan satu salinan saja.")
     end
 end
 
